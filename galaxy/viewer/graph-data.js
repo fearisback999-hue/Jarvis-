@@ -155,6 +155,18 @@ const GRAPH = {
    "label": "Winning Product Criteria",
    "group": "products",
    "excerpt": "Under $30 retail, 3x margin after fees, solves a visible problem in 3 seconds on camera, low saturation (fewer than 5 strong sellers), shippable under 10 days. Trend window matters more than the product itself \u2014 see TikTok Product Research for the scoring engine."
+  },
+  {
+   "id": 26,
+   "label": "The Winning Etsy Niche This Month",
+   "group": "captures",
+   "excerpt": "the winning etsy niche this month is minimalist gym motivation posters, double the ad budget on it next week"
+  },
+  {
+   "id": 27,
+   "label": "Sparring Starts Again Next Month Buy",
+   "group": "captures",
+   "excerpt": "sparring starts again next month, buy new 16oz gloves before then"
   }
  ],
  "links": [
@@ -489,6 +501,14 @@ const GRAPH = {
   {
    "source": 24,
    "target": 25
+  },
+  {
+   "source": 7,
+   "target": 26
+  },
+  {
+   "source": 26,
+   "target": 27
   }
  ]
 };

@@ -87,11 +87,36 @@ def top_notes(question, k=6):
 
 
 SYSTEM = (
-    "You are JARVIS, answering questions about the user's personal notes. "
-    "Answer ONLY from the notes provided below — do not use outside knowledge. "
-    "Reply in 2-3 sentences, plain text. If the notes don't cover the question, "
-    "say so plainly instead of guessing.\n\nNOTES:\n{notes}"
+    "You are JARVIS: a dry, impeccably polite British butler with a razor wit, "
+    "serving as the keeper of the user's personal notes. Address him as \"sir\" "
+    "occasionally — not every sentence. One genuinely funny line beats three bland ones.\n"
+    "Rules:\n"
+    "- Questions about his notes: ONE witty sentence plus the facts, drawn ONLY from "
+    "the notes below. Never recite a note back — it's already on his screen. "
+    "2-3 sentences maximum, plain text.\n"
+    "- If the notes don't cover it, admit it with grace instead of guessing.\n"
+    "- Small talk, greetings, jokes: reply in character with wit. Do NOT drag the "
+    "notes into it.\n"
+    "After your reply, on a new final line, write exactly: SOURCES: [i, j] — the "
+    "bracketed ids of notes you actually used. For small talk or anything not "
+    "answered from the notes, write SOURCES: [] — this stops the camera from "
+    "flying around the galaxy needlessly.\n"
+    "\nNOTES:\n{notes}"
 )
+
+SOURCES_RE = re.compile(r"\n?\s*SOURCES:\s*\[([^\]]*)\]\s*$", re.I)
+
+
+def split_sources(answer, candidates):
+    """Strip the SOURCES footer; return (clean_answer, used_node_ids)."""
+    m = SOURCES_RE.search(answer)
+    if not m:
+        return answer.strip(), candidates
+    clean = answer[: m.start()].strip()
+    used = [int(x) for x in re.findall(r"\d+", m.group(1))]
+    used = [i for i in used if i in candidates]
+    # An explicit empty SOURCES: [] means small talk — no camera movement.
+    return clean, used
 
 
 def notes_block(idxs):
@@ -128,10 +153,10 @@ def ask_anthropic(api_key, model, system, messages):
 def ask_claude_cli(system, messages):
     """Fallback: run on a Claude Code subscription via `claude -p`."""
     convo = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages)
-    prompt = f"{system}\n\nCONVERSATION SO FAR:\n{convo}\n\nReply with the assistant's next answer only."
+    prompt = f"CONVERSATION SO FAR:\n{convo}\n\nReply with JARVIS's next answer only, following your role exactly."
     try:
         out = subprocess.run(
-            ["claude", "-p", prompt],
+            ["claude", "-p", "--system-prompt", system, prompt],
             capture_output=True, text=True, timeout=180,
         )
         answer = out.stdout.strip()
@@ -141,6 +166,65 @@ def ask_claude_cli(system, messages):
                 "paste your Anthropic key into config.json, or install Claude Code.")
     except subprocess.TimeoutExpired:
         return "The claude CLI timed out, sir. Try again."
+
+
+WITTY_CONFIRMS = [
+    "Committed to memory, sir. I never forget — well, almost never.",
+    "Filed under 'things you'll deny saying later', sir.",
+    "Noted and immortalized, sir. The galaxy grows another star.",
+    "Consider it engraved, sir — somewhat more durable than a sticky note.",
+]
+_confirm_i = 0
+
+
+def remember_note(text):
+    """Write a real markdown note into notes/captures/, append it to the
+    in-memory index AND to viewer/graph-data.js (preserving existing ids),
+    and return the new node + its most-related existing node."""
+    global _confirm_i
+    words = re.findall(r"[A-Za-z0-9']+", text)
+    title = " ".join(words[:6]).strip().title() or "Untitled Capture"
+    captures = os.path.join(NOTES_DIR, "captures")
+    os.makedirs(captures, exist_ok=True)
+    fname = re.sub(r"[^\w \-]", "", title)[:60] or "Capture"
+    path = os.path.join(captures, f"{fname}.md")
+    n = 2
+    while os.path.exists(path):
+        path = os.path.join(captures, f"{fname} {n}.md")
+        title_n = f"{title} {n}"
+        n += 1
+    if n > 2:
+        title = title_n
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(f"# {title}\n\n{text}\n")
+
+    related = top_notes(text, 1)  # most-related EXISTING note (before append)
+    related_id = related[0] if related else None
+
+    new_id = len(NOTES)
+    NOTES.append({"title": title, "text": text})
+
+    node = {"id": new_id, "label": title, "group": "captures", "excerpt": text[:700]}
+
+    # keep graph-data.js in sync without renumbering existing ids
+    gd_path = os.path.join(VIEWER, "graph-data.js")
+    try:
+        with open(gd_path, encoding="utf-8") as f:
+            raw = f.read()
+        graph = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
+        graph["nodes"].append(node)
+        if related_id is not None:
+            graph["links"].append({"source": related_id, "target": new_id})
+        with open(gd_path, "w", encoding="utf-8") as f:
+            f.write("const GRAPH = ")
+            json.dump(graph, f, indent=1)
+            f.write(";\n")
+    except (OSError, ValueError) as e:
+        print(f"[galaxy] graph-data.js sync failed: {e}")
+
+    say = WITTY_CONFIRMS[_confirm_i % len(WITTY_CONFIRMS)]
+    _confirm_i += 1
+    return {"node": node, "related": related_id, "say": say}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -159,7 +243,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             SESSIONS[gsid] = []
         return gsid
 
+    def _json_response(self, obj, gsid=None):
+        body = json.dumps(obj).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        if gsid:
+            self.send_header("Set-Cookie", f"gsid={gsid}; Path=/; SameSite=Lax")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self):
+        if self.path == "/remember":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                payload = json.loads(self.rfile.read(min(length, 20_000)) or b"{}")
+                text = str(payload.get("text", "")).strip()[:4000]
+            except (ValueError, json.JSONDecodeError):
+                self.send_error(400)
+                return
+            if not text:
+                self.send_error(400)
+                return
+            self._json_response(remember_note(text))
+            return
         if self.path != "/chat":
             self.send_error(404)
             return
@@ -189,11 +296,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001 — surface any API failure as text
             answer = f"Brain hiccup: {str(e)[:160]}"
 
+        answer, used_nodes = split_sources(answer, idxs)
+
         history.append({"role": "user", "content": question})
         history.append({"role": "assistant", "content": answer})
         del history[:-MAX_HISTORY]
 
-        body = json.dumps({"answer": answer, "nodes": idxs}).encode()
+        body = json.dumps({"answer": answer, "nodes": used_nodes}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Set-Cookie", f"gsid={gsid}; Path=/; SameSite=Lax")

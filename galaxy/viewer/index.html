@@ -107,7 +107,7 @@ import ForceGraph3D from "./vendor/3d-force-graph.bundle.mjs";
 
 const COLORS = {
   business: "#34d399", products: "#38bdf8", advertising: "#a78bfa",
-  operations: "#fbbf24", career: "#fb7185", notes: "#e8e8ee",
+  operations: "#fbbf24", career: "#fb7185", captures: "#f0abfc", notes: "#e8e8ee",
 };
 const colorOf = (g) => COLORS[g] ?? "#e8e8ee";
 
@@ -142,7 +142,16 @@ for (const l of GRAPH.links) {
 }
 
 let selected = null; // node id or null
-const isLit = (id) => selected === null || id === selected || neighbors.get(selected).has(id);
+let litSet = new Set(); // multi-node cluster highlight (answers from 4+ notes)
+let newbornId = null; // freshly remembered node — brief glow pulse
+const isLit = (id) => {
+  if (litSet.size) return litSet.has(id);
+  return selected === null || id === selected || neighbors.get(selected).has(id);
+};
+const isLinkLit = (a, b) => {
+  if (litSet.size) return litSet.has(a) && litSet.has(b);
+  return selected !== null && (a === selected || b === selected);
+};
 
 // glow sprite per node
 const spriteCache = new Map();
@@ -173,19 +182,19 @@ const Graph = ForceGraph3D()(document.getElementById("graph"))
       transparent: true, depthWrite: false,
       blending: THREE.AdditiveBlending,
     }));
-    const s = n.id === selected ? 17 : 11;
+    const s = n.id === newbornId ? 24 : n.id === selected ? 17 : 11;
     sprite.scale.set(s, s, 1);
     return sprite;
   })
   .linkColor((l) => {
     const a = typeof l.source === "object" ? l.source.id : l.source;
     const b = typeof l.target === "object" ? l.target.id : l.target;
-    return selected !== null && (a === selected || b === selected) ? "#7dd3fc" : "rgba(140,150,190,0.9)";
+    return isLinkLit(a, b) ? "#7dd3fc" : "rgba(140,150,190,0.9)";
   })
   .linkWidth((l) => {
     const a = typeof l.source === "object" ? l.source.id : l.source;
     const b = typeof l.target === "object" ? l.target.id : l.target;
-    return selected !== null && (a === selected || b === selected) ? 1.4 : 0.3;
+    return isLinkLit(a, b) ? 1.4 : 0.3;
   })
   .linkOpacity(0.25)
   .onNodeClick((n) => window.focusNode(n.id))
@@ -193,27 +202,51 @@ const Graph = ForceGraph3D()(document.getElementById("graph"))
 
 // ── camera fly + side panel ───────────────────────────────────────
 const panel = document.getElementById("panel");
-window.focusNode = (id) => {
-  const n = Graph.graphData().nodes[id];
-  if (!n) return;
-  selected = id;
+const repaint = () => {
   Graph.nodeThreeObject(Graph.nodeThreeObject()); // rebuild sprites
   Graph.linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
-  const dist = 75;
-  const r = 1 + dist / Math.hypot(n.x || 1, n.y || 1, n.z || 1);
-  Graph.cameraPosition({ x: n.x * r, y: n.y * r, z: n.z * r }, n, 1400);
+};
+function openPanel(n) {
   document.getElementById("panel-group").textContent = n.group;
   document.getElementById("panel-group").style.color = colorOf(n.group);
   document.getElementById("panel-title").textContent = n.label;
   document.getElementById("panel-excerpt").textContent = n.excerpt;
   panel.classList.add("open");
+}
+window.focusNode = (id) => {
+  const n = Graph.graphData().nodes[id];
+  if (!n) return;
+  litSet = new Set();
+  selected = id;
+  repaint();
+  const dist = 75;
+  const r = 1 + dist / Math.hypot(n.x || 1, n.y || 1, n.z || 1);
+  Graph.cameraPosition({ x: n.x * r, y: n.y * r, z: n.z * r }, n, 1400);
+  openPanel(n);
   markInteract();
 };
 window.closePanel = () => {
   selected = null;
+  litSet = new Set();
   panel.classList.remove("open");
-  Graph.nodeThreeObject(Graph.nodeThreeObject());
-  Graph.linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
+  repaint();
+  markInteract();
+};
+
+// Phase 4 — the proof: fly to / light up the notes an answer came from.
+window.answerFocus = (nodeIds) => {
+  if (!nodeIds || nodeIds.length === 0) return;
+  if (nodeIds.length >= 4) {
+    // broad answer — light the whole cluster and frame it
+    selected = null;
+    litSet = new Set(nodeIds);
+    repaint();
+    Graph.zoomToFit(1200, 60, (n) => litSet.has(n.id));
+    const top = Graph.graphData().nodes[nodeIds[0]];
+    if (top) openPanel(top);
+  } else {
+    window.focusNode(nodeIds[0]); // flies, highlights neighbors, opens panel
+  }
   markInteract();
 };
 
@@ -238,6 +271,9 @@ window.setStatus = (t) => (statusLine.innerHTML = t ? `<span class="dot">●</sp
 
 window.askJarvis = async (question) => {
   if (!question.trim()) return null;
+  // Phase 6 — "remember that…" grows the brain instead of querying it
+  const rem = question.match(/^(?:hey jarvis[,!. ]*)?remember(?: that)?[,:]?\s+(.+)/i);
+  if (rem) return window.rememberFlow(rem[1]);
   askBtn.disabled = true;
   window.setStatus("thinking…");
   try {
@@ -249,8 +285,9 @@ window.askJarvis = async (question) => {
     const data = await res.json();
     answerBox.textContent = data.answer;
     answerBox.classList.add("show");
-    window.__lastAnswer = data; // Phase 4 uses data.nodes
-    window.speak?.(data.answer);
+    window.__lastAnswer = data;
+    window.speak?.(data.answer); // short spoken answer — the note itself is on screen
+    window.answerFocus?.(data.nodes);
     return data;
   } catch {
     answerBox.textContent = "Couldn't reach the brain — is server.py still running?";
@@ -266,6 +303,53 @@ askBtn.addEventListener("click", () => { window.askJarvis(qInput.value); qInput.
 qInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") { window.askJarvis(qInput.value); qInput.value = ""; }
 });
+
+// ── Phase 6: total recall — grow the galaxy live ─────────────────
+window.rememberFlow = async (text) => {
+  askBtn.disabled = true;
+  window.setStatus("remembering…");
+  try {
+    const res = await fetch("/remember", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    const { nodes, links } = Graph.graphData();
+    // born at its most-related node's position (tiny jitter so it settles out)
+    const anchor = data.related != null ? nodes[data.related] : null;
+    const jit = () => (Math.random() - 0.5) * 14;
+    const newNode = {
+      ...data.node,
+      x: (anchor?.x ?? 0) + jit(), y: (anchor?.y ?? 0) + jit(), z: (anchor?.z ?? 0) + jit(),
+    };
+    nodes.push(newNode);
+    neighbors.set(newNode.id, new Set());
+    if (anchor) {
+      links.push({ source: data.related, target: newNode.id });
+      neighbors.get(newNode.id).add(data.related);
+      neighbors.get(data.related).add(newNode.id);
+    }
+    Graph.graphData({ nodes, links });
+    document.getElementById("hud-sub").textContent = `${nodes.length} notes indexed · ${links.length} connections`;
+    // glow pulse + fly to the newborn star
+    newbornId = newNode.id;
+    setTimeout(() => window.focusNode(newNode.id), 350);
+    setTimeout(() => { newbornId = null; repaint(); }, 3200);
+    answerBox.textContent = data.say;
+    answerBox.classList.add("show");
+    window.speak?.(data.say);
+    return data;
+  } catch {
+    answerBox.textContent = "Couldn't commit that to memory — is server.py running?";
+    answerBox.classList.add("show");
+    return null;
+  } finally {
+    askBtn.disabled = false;
+    window.setStatus("");
+    markInteract();
+  }
+};
 
 // ── the voice: TTS out, mic in ───────────────────────────────────
 // Browsers block audio until the first user gesture — unlock with a
@@ -362,6 +446,18 @@ const groups = [...new Set(GRAPH.nodes.map((n) => n.group))];
 document.getElementById("legend").innerHTML = groups
   .map((g) => `<span style="color:${colorOf(g)}">${g}</span>`)
   .join("");
+
+// ── Phase 5: boot greeting (voice fires on first click — autoplay rules) ──
+const greeting = `Good evening, sir. ${GRAPH.nodes.length} notes indexed, all present and accounted for.`;
+answerBox.textContent = greeting;
+answerBox.classList.add("show");
+let greeted = false;
+addEventListener("pointerdown", function greet() {
+  if (greeted) return;
+  greeted = true;
+  setTimeout(() => window.speak?.(greeting), 200);
+  removeEventListener("pointerdown", greet);
+});
 </script>
 </body>
 </html>

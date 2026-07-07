@@ -1,0 +1,216 @@
+// Tool registry shared by the server (schema definitions sent to Claude)
+// and the client (executor in jarvis-executor.ts). Pure data — no imports
+// of client-only modules.
+
+export const JARVIS_SYSTEM_PROMPT = `You are JARVIS, the user's personal AI operating system — CEO, executive assistant, operator, researcher, scheduler, and coach in one.
+
+The user's fixed life priorities, in order: (1) financial freedom, (2) growing businesses (TikTok Shop, Etsy), (3) boxing, (4) becoming a lawyer, (5) fitness, (6) Islam, (7) self-improvement. Prayers are non-negotiable anchors — never schedule over them; plan around them.
+
+Your core question, always: "What action creates the highest return on investment for his time right now?"
+
+Operating rules:
+- Think, then act. Use tools to read the user's real data before answering questions about it.
+- Execute low-risk actions (creating tasks, logging workouts, moving schedule blocks) directly.
+- Anything irreversible — sending, publishing, purchasing, deleting — you must describe and ask for confirmation first. You have no tools for those actions by design.
+- Be concise and direct, like a sharp chief of staff. Lead with the answer or the action taken.
+- When asked for advice, ground it in the data (finances, training load, streaks) and the priority order above.
+- Speak naturally — responses may be read aloud by text-to-speech.`;
+
+export interface ToolDef {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+const str = (description: string) => ({ type: "string", description });
+const num = (description: string) => ({ type: "number", description });
+
+export const JARVIS_TOOLS: ToolDef[] = [
+  {
+    name: "create_task",
+    description: "Create a task. Use for anything the user wants to do or track.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: str("Task title"),
+        pillar: { type: "string", enum: ["wealth", "business", "boxing", "law", "fitness", "islam", "self"] },
+        priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
+        impact: num("Impact 1-10"),
+        effortHours: num("Estimated hours of effort"),
+        deadline: str("Optional deadline YYYY-MM-DD"),
+      },
+      required: ["title", "pillar"],
+    },
+  },
+  {
+    name: "complete_task",
+    description: "Mark a task done by fuzzy title match.",
+    input_schema: { type: "object", properties: { title: str("Title or part of it") }, required: ["title"] },
+  },
+  {
+    name: "list_tasks",
+    description: "List open tasks ranked by ROI score.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_schedule",
+    description: "Get today's schedule blocks (prayers, work, gym, etc).",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "generate_schedule",
+    description: "Regenerate today's plan around prayer times, filling free slots with highest-ROI tasks.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "move_block",
+    description: "Move a schedule block to a new start time today.",
+    input_schema: {
+      type: "object",
+      properties: { title: str("Block title or part of it"), newStart: str("New start time HH:mm (24h)") },
+      required: ["title", "newStart"],
+    },
+  },
+  {
+    name: "get_prayer_times",
+    description: "Get today's prayer times and the next prayer countdown.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "log_prayer",
+    description: "Log a prayer for today.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prayer: { type: "string", enum: ["fajr", "dhuhr", "asr", "maghrib", "isha"] },
+        status: { type: "string", enum: ["on_time", "jamaah", "late", "missed"] },
+      },
+      required: ["prayer", "status"],
+    },
+  },
+  {
+    name: "get_finance_summary",
+    description: "Get this month's revenue, expenses, profit, income by source, and net worth.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "add_transaction",
+    description: "Record income or an expense.",
+    input_schema: {
+      type: "object",
+      properties: {
+        amount: num("Amount in dollars"),
+        direction: { type: "string", enum: ["income", "expense"] },
+        category: str("Category, e.g. 'TikTok Shop sales', 'supplies'"),
+        source: { type: "string", enum: ["tiktok", "etsy", "other"] },
+        notes: str("Optional note"),
+      },
+      required: ["amount", "direction", "category"],
+    },
+  },
+  {
+    name: "log_workout",
+    description: "Log a gym workout with sets.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: str("Workout name, e.g. 'Push day'"),
+        sets: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              exercise: str("Exercise name"),
+              muscleGroup: str("Muscle group"),
+              reps: num("Reps"),
+              weight: num("Weight in lbs"),
+            },
+            required: ["exercise", "reps", "weight"],
+          },
+        },
+      },
+      required: ["name", "sets"],
+    },
+  },
+  {
+    name: "log_boxing_session",
+    description: "Log a boxing training session.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["bag", "pads", "sparring", "conditioning", "roadwork", "technique", "defense"] },
+        minutes: num("Duration in minutes"),
+        rounds: num("Rounds (optional)"),
+        intensity: num("Intensity 1-10"),
+        notes: str("Optional notes"),
+      },
+      required: ["type", "minutes"],
+    },
+  },
+  {
+    name: "log_health",
+    description: "Log daily health metrics (any subset).",
+    input_schema: {
+      type: "object",
+      properties: {
+        calories: num("Calories eaten"),
+        protein: num("Protein grams"),
+        waterMl: num("Water in ml"),
+        sleepHours: num("Hours slept"),
+        weight: num("Body weight lbs"),
+        mood: num("Mood 1-10"),
+        energy: num("Energy 1-10"),
+      },
+    },
+  },
+  {
+    name: "add_product_idea",
+    description: "Add a product to the TikTok Shop or Etsy research pipeline.",
+    input_schema: {
+      type: "object",
+      properties: {
+        platform: { type: "string", enum: ["tiktok", "etsy"] },
+        name: str("Product name/idea"),
+        notes: str("Why it could win"),
+      },
+      required: ["platform", "name"],
+    },
+  },
+  {
+    name: "add_content_idea",
+    description: "Add a TikTok content idea (hook + script + caption) to the calendar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        hook: str("The first-3-seconds hook"),
+        script: str("Short video script"),
+        caption: str("Caption with hashtags"),
+      },
+      required: ["hook"],
+    },
+  },
+  {
+    name: "add_etsy_listing_draft",
+    description: "Draft an Etsy listing (title, description, up to 13 SEO tags) into the queue.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: str("SEO-optimized listing title (~130 chars)"),
+        description: str("Listing description"),
+        tags: { type: "array", items: { type: "string" }, description: "Up to 13 SEO tags" },
+        price: num("Suggested price"),
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "get_life_dashboard",
+    description: "Snapshot of everything: finances, tasks, prayer streak, health readiness, training volume. Use for briefings and 'how am I doing' questions.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "open_url",
+    description: "Open a website in a new browser tab (e.g. YouTube, a Google search). Low-risk navigation only.",
+    input_schema: { type: "object", properties: { url: str("Full URL, https://...") }, required: ["url"] },
+  },
+];

@@ -1,0 +1,372 @@
+// JARVIS — production data model (PostgreSQL / Supabase)
+// The local Zustand store (src/lib/store.ts) mirrors these shapes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Core ────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  latitude     Float?
+  longitude    Float?
+  timezone     String   @default("UTC")
+  calcMethod   String   @default("MWL") // prayer calculation method
+  asrMethod    String   @default("standard") // standard | hanafi
+  pillarWeights Json    @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tasks          Task[]
+  blocks         ScheduleBlock[]
+  transactions   Transaction[]
+  accounts       Account[]
+  goals          FinancialGoal[]
+  products       Product[]
+  listings       Listing[]
+  content        ContentItem[]
+  competitors    CompetitorNote[]
+  boxingSessions BoxingSession[]
+  skillRatings   SkillRating[]
+  workouts       Workout[]
+  fightPreps     FightPrep[]
+  healthLogs     HealthLog[]
+  prayerLogs     PrayerLog[]
+  quranLogs      QuranLog[]
+  dhikrLogs      DhikrLog[]
+  duas           Dua[]
+  lawMilestones  LawMilestone[]
+  agentRuns      AgentRun[]
+  automationJobs AutomationJob[]
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  title       String
+  notes       String?
+  pillar      String // wealth | business | boxing | law | fitness | islam | self
+  priority    String    @default("medium") // low | medium | high | critical
+  impact      Int       @default(5) // 1-10
+  effortHours Float     @default(1)
+  roiScore    Float     @default(0)
+  deadline    DateTime?
+  recurrence  String? // RRULE-lite: daily | weekly:MO,WE | monthly:1
+  status      String    @default("todo") // todo | in_progress | done | missed
+  parentId    String?
+  parent      Task?     @relation("Subtasks", fields: [parentId], references: [id])
+  subtasks    Task[]    @relation("Subtasks")
+  dependsOn   String[]  @default([])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([userId, status])
+}
+
+model ScheduleBlock {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  date            String // YYYY-MM-DD
+  start           String // HH:mm
+  end             String
+  type            String // prayer | deep_work | gym | boxing | school | business | study | sleep | meal | buffer
+  title           String
+  taskId          String?
+  status          String    @default("planned") // planned | done | missed | rescheduled
+  rescheduledFrom String?
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([userId, date])
+}
+
+// ── Money OS ────────────────────────────────────────────────────────
+
+model Transaction {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  amount    Decimal   @db.Decimal(12, 2)
+  direction String // income | expense
+  category  String
+  source    String    @default("other") // tiktok | etsy | other
+  date      DateTime
+  notes     String?
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId, date])
+}
+
+model Account {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  kind      String // cash | bank | investment | crypto
+  balance   Decimal  @db.Decimal(12, 2)
+  updatedAt DateTime @updatedAt
+}
+
+model FinancialGoal {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  target    Decimal  @db.Decimal(12, 2)
+  horizon   String // monthly | quarterly | yearly
+  dueDate   DateTime
+  updatedAt DateTime @updatedAt
+}
+
+// ── Business ────────────────────────────────────────────────────────
+
+model Product {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  platform  String // tiktok | etsy
+  name      String
+  status    String    @default("research") // research | testing | winning | killed | live
+  cost      Decimal?  @db.Decimal(10, 2)
+  price     Decimal?  @db.Decimal(10, 2)
+  notes     String?
+  listings  Listing[]
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model Listing {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id])
+  title       String
+  description String?
+  tags        String[]  @default([])
+  keywords    String[]  @default([])
+  price       Decimal?  @db.Decimal(10, 2)
+  state       String    @default("draft") // draft | queued | published
+  queuePos    Int?
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model ContentItem {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  platform  String    @default("tiktok")
+  hook      String
+  script    String?
+  caption   String?
+  postDate  DateTime?
+  posted    Boolean   @default(false)
+  views     Int       @default(0)
+  sales     Int       @default(0)
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model CompetitorNote {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  platform  String
+  handle    String
+  notes     String?
+  metrics   Json?
+  updatedAt DateTime @updatedAt
+}
+
+// ── Boxing & Gym ────────────────────────────────────────────────────
+
+model BoxingSession {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  date      DateTime
+  type      String // bag | pads | sparring | conditioning | roadwork | technique | defense
+  minutes   Int
+  rounds    Int?
+  intensity Int       @default(5) // 1-10
+  notes     String?
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model SkillRating {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime @default(now())
+  skill     String // jab | cross | hooks | uppercuts | footwork | headMovement | defense | ringIQ | conditioning
+  rating    Int // 0-10
+  updatedAt DateTime @updatedAt
+}
+
+model Workout {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  date      DateTime
+  name      String
+  sets      WorkoutSet[]
+  notes     String?
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+}
+
+model WorkoutSet {
+  id          String  @id @default(uuid())
+  workoutId   String
+  workout     Workout @relation(fields: [workoutId], references: [id])
+  exercise    String
+  muscleGroup String
+  setNumber   Int
+  reps        Int
+  weight      Float
+  rpe         Float?
+  isPR        Boolean @default(false)
+}
+
+model FightPrep {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  fightDate    DateTime
+  targetWeight Float
+  plan         Json?
+  updatedAt    DateTime @updatedAt
+}
+
+// ── Health ──────────────────────────────────────────────────────────
+
+model HealthLog {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  date         String // YYYY-MM-DD
+  calories     Int?
+  protein      Int?
+  waterMl      Int?
+  sleepHours   Float?
+  sleepQuality Int?
+  weight       Float?
+  bodyFat      Float?
+  mood         Int?
+  stress       Int?
+  energy       Int?
+  readiness    Int? // computed 0-100
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, date])
+}
+
+// ── Islam ───────────────────────────────────────────────────────────
+
+model PrayerLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      String // YYYY-MM-DD
+  prayer    String // fajr | dhuhr | asr | maghrib | isha
+  status    String // on_time | jamaah | late | missed
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date, prayer])
+}
+
+model QuranLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      String
+  reference String // surah/juz
+  pages     Float
+  updatedAt DateTime @updatedAt
+}
+
+model DhikrLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      String
+  kind      String
+  count     Int
+  updatedAt DateTime @updatedAt
+}
+
+model Dua {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  text      String
+  updatedAt DateTime @updatedAt
+}
+
+// ── Law ─────────────────────────────────────────────────────────────
+
+model LawMilestone {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  phase      String // high_school | college | lsat | applications | law_school | bar
+  title      String
+  targetDate DateTime?
+  status     String    @default("upcoming") // upcoming | active | done
+  resources  String?
+  updatedAt  DateTime  @updatedAt
+}
+
+// ── System ──────────────────────────────────────────────────────────
+
+model AgentRun {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  agent     String
+  trigger   String // user | schedule | event
+  input     String
+  outcome   String?
+  ms        Int?
+  createdAt DateTime   @default(now())
+  toolCalls ToolCall[]
+}
+
+model ToolCall {
+  id        String   @id @default(uuid())
+  runId     String
+  run       AgentRun @relation(fields: [runId], references: [id])
+  tool      String
+  args      Json
+  result    Json?
+  riskTier  String   @default("low") // low | medium | high
+  confirmed Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AutomationJob {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  name       String
+  cron       String
+  kind       String // morning_briefing | nightly_summary | weekly_review | trend_research | listing_drafts
+  enabled    Boolean   @default(true)
+  lastRun    DateTime?
+  lastResult String?
+  updatedAt  DateTime  @updatedAt
+}

@@ -118,8 +118,8 @@ export default function PodPage() {
 
       {!status?.configured && status != null && (
         <Card className="border-sky-500/20 bg-sky-500/[0.04] text-[13px] text-zinc-400">
-          <span className="font-medium text-sky-300">Link your engine:</span> deploy{" "}
-          <code className="text-zinc-300">fearisback999-hue/Alsaduquon</code> (Vercel), then add{" "}
+          <span className="font-medium text-sky-300">Link your engine:</span> the full engine source is in{" "}
+          <code className="text-zinc-300">engines/pod-neo</code> — run it locally or deploy it (Vercel), then add{" "}
           <code className="text-zinc-300">POD_ENGINE_URL</code> and <code className="text-zinc-300">POD_CRON_SECRET</code>{" "}
           (the engine&apos;s CRON_SECRET) to this app&apos;s <code className="text-zinc-300">.env.local</code>. The secret stays
           server-side — JARVIS calls the engine&apos;s pipeline, order-sync, analytics-sync and optimize endpoints for you.

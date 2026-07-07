@@ -62,9 +62,12 @@ node desktop-bridge/bridge.mjs
 
 It prints a pairing token; paste it into **Settings → Desktop bridge**. JARVIS can then open apps, search Google in your real browser, control volume and media, type, take screenshots, and lock the machine — by text or voice. The bridge listens on `127.0.0.1` only.
 
-## POD engine
+## The money engines (vendored in-repo)
 
-The [`Alsaduquon`](https://github.com/fearisback999-hue/Alsaduquon) POD automation engine plugs in via `.env.local` (`POD_ENGINE_URL` + `POD_CRON_SECRET`). JARVIS can run the pipeline, sync orders, sync analytics, and optimize listings — from the POD page or by voice.
+Both pre-existing engines live in [`engines/`](engines/README.md) with full source:
+
+- **`engines/pod-neo/`** — the NEO POD automation engine (from [Alsaduquon](https://github.com/fearisback999-hue/Alsaduquon)). Run it (`npm run dev -- -p 3001`) or deploy it, then set `POD_ENGINE_URL` + `POD_CRON_SECRET` in `.env.local`. JARVIS runs the pipeline, syncs orders/analytics, and optimizes listings — from the POD page or by voice.
+- **`engines/tiktok-engine/`** — the TikTok Shop Product Intelligence Engine (from [Pr](https://github.com/fearisback999-hue/Pr)): momentum detection, 100-point scoring, attack packets. Python CLI: `cd engines/tiktok-engine && pip install -e . && tt-engine --help`. The in-app Product Search on the TikTok page is the quick manual companion.
 
 ## Documentation
 

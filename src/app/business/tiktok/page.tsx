@@ -129,8 +129,10 @@ export default function TikTokPage() {
       </div>
 
       <Card className="border-sky-500/20 bg-sky-500/[0.04] text-[13px] text-zinc-400">
-        <span className="font-medium text-sky-300">JARVIS tip:</span> ask &quot;research 10 winning TikTok Shop products&quot; or
-        &quot;write a script and caption for [product]&quot; in the JARVIS tab — results land here automatically.
+        <span className="font-medium text-sky-300">Full engine:</span> your TikTok Shop Product Intelligence Engine
+        (momentum detection, 100-pt scoring, attack packets) is in{" "}
+        <code className="text-zinc-300">engines/tiktok-engine</code> — run{" "}
+        <code className="text-zinc-300">pip install -e . && tt-engine --help</code>. The search above is the quick manual companion.
       </Card>
     </div>
   );

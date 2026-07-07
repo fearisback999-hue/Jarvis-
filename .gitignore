@@ -26,3 +26,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# MCP server configs may carry auth headers — keep local
+mcp-servers.json

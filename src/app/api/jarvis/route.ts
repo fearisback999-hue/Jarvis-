@@ -5,6 +5,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { JARVIS_SYSTEM_PROMPT, JARVIS_TOOLS } from "@/lib/jarvis-tools";
+import { getMcpToolDefs } from "@/lib/mcp";
 
 export const maxDuration = 60;
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
         { type: "text", text: JARVIS_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
         ...(context ? [{ type: "text" as const, text: `Live context snapshot:\n${context}` }] : []),
       ],
-      tools: JARVIS_TOOLS.map((t) => ({
+      tools: [...JARVIS_TOOLS, ...(await getMcpToolDefs().catch(() => []))].map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.input_schema as Anthropic.Tool.InputSchema,

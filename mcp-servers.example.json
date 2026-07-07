@@ -1,0 +1,14 @@
+{
+  "_readme": "Copy to mcp-servers.json (gitignored) and add your MCP servers. Every tool they expose becomes a JARVIS tool automatically — Zapier MCP, Composio, or anything speaking Streamable HTTP. Auth headers stay server-side.",
+  "servers": [
+    {
+      "name": "zapier",
+      "url": "https://mcp.zapier.com/api/mcp/s/YOUR-SECRET/mcp"
+    },
+    {
+      "name": "local-tools",
+      "url": "http://localhost:9200/mcp",
+      "headers": { "Authorization": "Bearer YOUR-TOKEN" }
+    }
+  ]
+}

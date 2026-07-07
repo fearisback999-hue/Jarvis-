@@ -1,13 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useJarvis, financeSummary } from "@/lib/store";
 import type { Creator, CreatorStatus } from "@/lib/store";
 import { fmtMoney, todayKey, cn } from "@/lib/utils";
 import { useMounted } from "@/hooks/use-mounted";
 import { Card, StatCard, SectionHeader, Button, Input, Select, ProgressBar, EmptyState, Badge } from "@/components/ui";
-import { Megaphone, ArrowRight, Clapperboard, ExternalLink, Trash2, Users } from "lucide-react";
+import { Megaphone, ArrowRight, Clapperboard, ExternalLink, Plug, Search, Trash2, Users } from "lucide-react";
+
+interface McpStatus {
+  configured: boolean;
+  servers: { name: string; ok: boolean; tools: { name: string }[]; error?: string }[];
+}
+interface MarketplaceCreator { handle: string; nickname: string; followers: number; gmv: number }
 
 const CREATOR_STATUS: { id: CreatorStatus; label: string; cls: string }[] = [
   { id: "prospect", label: "prospect", cls: "bg-zinc-800 text-zinc-400" },
@@ -43,6 +49,32 @@ export default function AdsPage() {
   const [ugcAngle, setUgcAngle] = useState("");
   const [ugcDone, setUgcDone] = useState(false);
   const [creatorForm, setCreatorForm] = useState({ handle: "", platform: "tiktok" as Creator["platform"], commission: "15" });
+  const [mcp, setMcp] = useState<McpStatus | null>(null);
+  const [ttsConfigured, setTtsConfigured] = useState<boolean | null>(null);
+  const [mktQuery, setMktQuery] = useState("");
+  const [mktResults, setMktResults] = useState<MarketplaceCreator[] | null>(null);
+  const [mktError, setMktError] = useState("");
+  const [mktBusy, setMktBusy] = useState(false);
+
+  useEffect(() => {
+    if (!mounted) return;
+    fetch("/api/mcp").then((r) => r.json()).then(setMcp).catch(() => setMcp({ configured: false, servers: [] }));
+    fetch("/api/tiktok-affiliate").then((r) => r.json()).then((d) => setTtsConfigured(d.configured)).catch(() => setTtsConfigured(false));
+  }, [mounted]);
+
+  const searchMarketplace = async () => {
+    setMktBusy(true); setMktError(""); setMktResults(null);
+    try {
+      const res = await fetch("/api/tiktok-affiliate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "search_creators", keyword: mktQuery.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (data.ok) setMktResults(data.creators);
+      else setMktError(data.error ?? data.apiMessage ?? "Search failed");
+    } catch { setMktError("Request failed"); }
+    finally { setMktBusy(false); }
+  };
 
   if (!mounted) return null;
 
@@ -177,6 +209,43 @@ export default function AdsPage() {
       </Card>
 
       <Card>
+        <h2 className="mb-3 flex items-center gap-2 text-[14px] font-semibold">
+          <Plug size={15} className="text-emerald-400" /> Integrations
+        </h2>
+        <div className="flex flex-col gap-2 text-[13px]">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+            <div>
+              <span className="font-medium">TikTok Shop Affiliate API</span>
+              <span className="ml-2 text-[11.5px] text-zinc-600">real creator marketplace search + collaboration data</span>
+            </div>
+            <Badge className={ttsConfigured ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-800 text-zinc-500"}>
+              {ttsConfigured == null ? "checking…" : ttsConfigured ? "connected" : "add TTS_* keys"}
+            </Badge>
+          </div>
+          {mcp?.servers.map((s2) => (
+            <div key={s2.name} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+              <div className="min-w-0">
+                <span className="font-medium">MCP · {s2.name}</span>
+                <span className="ml-2 truncate text-[11.5px] text-zinc-600">
+                  {s2.ok ? `${s2.tools.length} tools live in JARVIS: ${s2.tools.slice(0, 4).map((t) => t.name).join(", ")}${s2.tools.length > 4 ? "…" : ""}` : s2.error}
+                </span>
+              </div>
+              <Badge className={s2.ok ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400"}>
+                {s2.ok ? "connected" : "unreachable"}
+              </Badge>
+            </div>
+          ))}
+          {mcp !== null && !mcp.configured && (
+            <p className="text-[12px] text-zinc-600">
+              No MCP servers linked yet. Copy <code className="text-zinc-400">mcp-servers.example.json</code> →{" "}
+              <code className="text-zinc-400">mcp-servers.json</code> and add any MCP endpoint (Zapier MCP, Composio,
+              a Higgsfield MCP when one ships, your own) — every tool it exposes becomes a JARVIS tool automatically.
+            </p>
+          )}
+        </div>
+      </Card>
+
+      <Card>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-[14px] font-semibold">
             <Users size={15} className="text-emerald-400" /> UGC Creator Affiliate Program
@@ -187,6 +256,33 @@ export default function AdsPage() {
             <span><span className="tabular font-semibold text-zinc-300">{fmtMoney(s.creators.reduce((a, c) => a + c.gmv, 0))}</span> GMV attributed</span>
           </div>
         </div>
+        {ttsConfigured && (
+          <div className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
+            <div className="mb-2 flex items-center gap-2 text-[12.5px] font-medium text-emerald-300">
+              <Search size={13} /> Creator marketplace (live TikTok Shop data)
+            </div>
+            <div className="flex gap-2">
+              <Input placeholder="Niche or keyword…" value={mktQuery} onChange={(e) => setMktQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void searchMarketplace()} />
+              <Button onClick={() => void searchMarketplace()} disabled={mktBusy}>{mktBusy ? "Searching…" : "Search"}</Button>
+            </div>
+            {mktError && <p className="mt-2 text-[12px] text-rose-400">{mktError}</p>}
+            {mktResults && (
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {mktResults.length === 0 && <li className="text-[12px] text-zinc-500">No creators returned for that keyword.</li>}
+                {mktResults.map((c, i) => (
+                  <li key={i} className="flex items-center gap-3 text-[12.5px]">
+                    <span className="min-w-0 flex-1 truncate font-medium">@{c.handle.replace(/^@/, "")}{c.nickname ? ` · ${c.nickname}` : ""}</span>
+                    <span className="tabular text-zinc-500">{c.followers.toLocaleString()} followers</span>
+                    {c.gmv > 0 && <span className="tabular text-zinc-500">{fmtMoney(c.gmv)} GMV</span>}
+                    <Button variant="ghost" className="px-2 py-0.5 text-[11px]" onClick={() => s.addCreator({ handle: `@${c.handle.replace(/^@/, "")}`, platform: "tiktok", status: "prospect", commissionPct: 15, gmv: 0 })}>
+                      Add to pipeline
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         <div className="mb-3 flex flex-wrap gap-2">
           <Input className="min-w-40 flex-1" placeholder="@handle" value={creatorForm.handle} onChange={(e) => setCreatorForm({ ...creatorForm, handle: e.target.value })} />
           <Select value={creatorForm.platform} onChange={(e) => setCreatorForm({ ...creatorForm, platform: e.target.value as Creator["platform"] })}>

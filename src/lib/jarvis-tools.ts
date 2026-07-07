@@ -235,6 +235,11 @@ export const JARVIS_TOOLS: ToolDef[] = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "search_marketplace_creators",
+    description: "Search TikTok Shop's real creator marketplace via the Affiliate API (needs TTS_* credentials configured). Returns creators with follower counts and GMV. Add promising ones to the pipeline with add_ugc_creator — inviting/contacting them is his call, not yours.",
+    input_schema: { type: "object", properties: { keyword: str("Niche or product keyword") } },
+  },
+  {
     name: "add_content_idea",
     description: "Add a TikTok content idea (hook + script + caption) to the calendar.",
     input_schema: {

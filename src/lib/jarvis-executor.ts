@@ -209,6 +209,14 @@ export async function executeJarvisTool(name: string, input: Json): Promise<Json
       });
       return { ok: true, added: input.handle, pipeline: useJarvis.getState().creators.length };
     }
+    case "search_marketplace_creators": {
+      const res = await fetch("/api/tiktok-affiliate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "search_creators", keyword: input.keyword ? String(input.keyword) : undefined }),
+      });
+      return (await res.json()) as Json;
+    }
     case "get_affiliate_summary": {
       const cs = s.creators;
       return {
@@ -300,8 +308,21 @@ export async function executeJarvisTool(name: string, input: Json): Promise<Json
       });
       return (await res.json()) as Json;
     }
-    default:
+    default: {
+      // MCP tools: mcp__<server>__<tool> → routed through the server bridge
+      if (name.startsWith("mcp__")) {
+        const parts = name.split("__");
+        const server = parts[1];
+        const tool = parts.slice(2).join("__");
+        const res = await fetch("/api/mcp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ server, tool, args: input }),
+        });
+        return (await res.json()) as Json;
+      }
       return { ok: false, error: `Unknown tool: ${name}` };
+    }
   }
 }
 

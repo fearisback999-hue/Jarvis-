@@ -15,11 +15,6 @@
   #hud .sub { font-size: 11px; color: #8b8b98; margin-top: 3px; letter-spacing: .05em; }
   #legend { position: fixed; bottom: 16px; left: 18px; z-index: 3; display: flex; gap: 14px;
     font-size: 11px; color: #9a9aa6; pointer-events: none; }
-  #views { position: fixed; top: 16px; right: 16px; z-index: 3; display: flex; gap: 6px; }
-  #views button { background: rgba(12,12,18,.7); border: 1px solid rgba(255,255,255,.12);
-    color: #c9c9d4; font: 11px Inter, sans-serif; padding: 6px 10px; border-radius: 9px;
-    cursor: pointer; backdrop-filter: blur(8px); letter-spacing: .03em; }
-  #views button:hover { background: rgba(255,255,255,.12); color: #fff; }
   #legend span::before { content: "●"; margin-right: 5px; }
   #panel { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 4;
     background: rgba(10,10,14,.88); backdrop-filter: blur(14px);
@@ -74,7 +69,6 @@
   <div class="title">J A R V I S <b>·</b> KNOWLEDGE GALAXY</div>
   <div class="sub" id="hud-sub">— notes indexed</div>
 </div>
-<div id="views"></div>
 <div id="legend"></div>
 <div id="askwrap">
   <div id="answer"></div>
@@ -111,7 +105,6 @@
 import * as THREE from "three";
 import ForceGraph3D from "./vendor/3d-force-graph.bundle.mjs";
 import { UnrealBloomPass } from "./vendor/UnrealBloomPass.js";
-import { buildMilkyWay } from "./galaxy-env.js";
 
 const COLORS = {
   business: "#34d399", products: "#38bdf8", advertising: "#a78bfa",
@@ -161,22 +154,63 @@ const isLinkLit = (a, b) => {
   return selected !== null && (a === selected || b === selected);
 };
 
-// glow sprite per node
+// cinematic star texture per node: chromatic halo, hot core, and
+// 4-point diffraction spikes (plus faint diagonals when highlighted)
 const spriteCache = new Map();
-function glowTexture(color, bright) {
+function starTexture(color, bright) {
   const key = color + bright;
   if (spriteCache.has(key)) return spriteCache.get(key);
-  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const S = 256, C = S / 2;
+  const c = document.createElement("canvas"); c.width = c.height = S;
   const g = c.getContext("2d");
-  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grad.addColorStop(0, "#ffffff");
-  grad.addColorStop(0.25, color);
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  g.fillStyle = grad; g.globalAlpha = bright ? 1 : 0.28;
-  g.fillRect(0, 0, 128, 128);
+  g.globalCompositeOperation = "lighter";
+
+  const streak = (angle, length, width, alpha) => {
+    g.save();
+    g.translate(C, C);
+    g.rotate(angle);
+    g.scale(1, width / length);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, length);
+    grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+    grad.addColorStop(0.35, hexToRgba(color, alpha * 0.6));
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(0, 0, length, 0, 7); g.fill();
+    g.restore();
+  };
+
+  // wide chromatic halo
+  const halo = g.createRadialGradient(C, C, 0, C, C, C);
+  halo.addColorStop(0, hexToRgba(color, bright ? 0.85 : 0.35));
+  halo.addColorStop(0.35, hexToRgba(color, bright ? 0.28 : 0.10));
+  halo.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = halo;
+  g.fillRect(0, 0, S, S);
+
+  // diffraction spikes
+  const spikeA = bright ? 0.9 : 0.4;
+  streak(0, C * 0.98, 7, spikeA);
+  streak(Math.PI / 2, C * 0.98, 7, spikeA);
+  if (bright) {
+    streak(Math.PI / 4, C * 0.55, 5, 0.35);
+    streak(-Math.PI / 4, C * 0.55, 5, 0.35);
+  }
+
+  // hot core
+  const core = g.createRadialGradient(C, C, 0, C, C, C * 0.16);
+  core.addColorStop(0, `rgba(255,255,255,${bright ? 1 : 0.55})`);
+  core.addColorStop(0.5, hexToRgba(color, bright ? 0.9 : 0.4));
+  core.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = core;
+  g.fillRect(0, 0, S, S);
+
   const tex = new THREE.CanvasTexture(c);
   spriteCache.set(key, tex);
   return tex;
+}
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
 const Graph = ForceGraph3D()(document.getElementById("graph"))
@@ -185,24 +219,30 @@ const Graph = ForceGraph3D()(document.getElementById("graph"))
   .showNavInfo(false)
   .nodeLabel((n) => `<div style="font:12px Inter,sans-serif;color:#fff;background:rgba(8,8,12,.85);padding:4px 8px;border-radius:6px">${n.label}</div>`)
   .nodeThreeObject((n) => {
-    // solid luminous core + soft halo — the bloom pass turns these into stars
+    // real star anatomy: luminous core sphere + spiked chromatic flare.
+    // Size scales with how connected the note is — hub notes burn bigger.
     const lit = isLit(n.id);
     const group = new THREE.Group();
+    const degree = neighbors.get(n.id)?.size ?? 0;
+    const base = 11 + Math.min(9, degree * 1.1);
+    const s = n.id === newbornId ? base * 2 : n.id === selected ? base * 1.55 : base;
+    n.__baseScale = s;
+
     const core = new THREE.Mesh(
-      new THREE.SphereGeometry(n.id === selected || n.id === newbornId ? 2.6 : 1.9, 16, 16),
+      new THREE.SphereGeometry(1.4 + Math.min(1.4, degree * 0.16), 16, 16),
       new THREE.MeshBasicMaterial({
-        color: new THREE.Color(colorOf(n.group)).lerp(new THREE.Color("#ffffff"), lit ? 0.55 : 0.1),
-        transparent: true, opacity: lit ? 1 : 0.35,
+        color: new THREE.Color(colorOf(n.group)).lerp(new THREE.Color("#ffffff"), lit ? 0.6 : 0.15),
+        transparent: true, opacity: lit ? 1 : 0.4,
       })
     );
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTexture(colorOf(n.group), lit),
+    const flare = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: starTexture(colorOf(n.group), lit),
       transparent: true, depthWrite: false,
       blending: THREE.AdditiveBlending,
+      opacity: lit ? 1 : 0.65,
     }));
-    const s = n.id === newbornId ? 26 : n.id === selected ? 18 : 12;
-    halo.scale.set(s, s, 1);
-    group.add(core, halo);
+    flare.scale.set(s, s, 1);
+    group.add(core, flare);
     return group;
   })
   .linkDirectionalParticles((l) => {
@@ -238,14 +278,7 @@ Graph.postProcessingComposer().addPass(
 
 const scene = Graph.scene();
 
-// ── the Milky Way itself — procedural, astronomy-informed ─────────
-// Your notes float just above the galactic disk, near the core.
-const milkyWay = buildMilkyWay(THREE);
-milkyWay.position.set(0, -300, 0);
-milkyWay.rotation.set(0.40, 0, 0.10);
-scene.add(milkyWay);
-
-// faint extragalactic backdrop (distant field stars)
+// faint deep-space backdrop (distant field stars)
 {
   const geo = new THREE.BufferGeometry();
   const N = 2200, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
@@ -269,21 +302,33 @@ scene.add(milkyWay);
   })));
 }
 
-// ── explorable camera: view presets ───────────────────────────────
-const GALAXY_CENTER = { x: 0, y: -300, z: 0 };
-const VIEWS = {
-  "My Notes": [{ x: 0, y: 70, z: 430 }, { x: 0, y: 0, z: 0 }],
-  "Overview": [{ x: 700, y: 480, z: 950 }, GALAXY_CENTER],
-  "Face-on": [{ x: 300, y: 3100, z: 1300 }, GALAXY_CENTER],
-  "Edge-on": [{ x: 2900, y: -160, z: 300 }, GALAXY_CENTER],
-  "Core dive": [{ x: 160, y: -160, z: 420 }, GALAXY_CENTER],
-};
-const viewsEl = document.getElementById("views");
-for (const [name, [pos, look]] of Object.entries(VIEWS)) {
-  const b = document.createElement("button");
-  b.textContent = name;
-  b.onclick = () => { Graph.cameraPosition(pos, look, 1800); markInteract(); };
-  viewsEl.appendChild(b);
+// soft nebula haze for depth (subtle, far behind the constellation)
+function nebulaTexture(hexA, hexB) {
+  const c = document.createElement("canvas"); c.width = c.height = 512;
+  const g = c.getContext("2d");
+  for (let i = 0; i < 5; i++) {
+    const x = 130 + Math.random() * 250, y = 130 + Math.random() * 250, r = 120 + Math.random() * 130;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, i % 2 ? hexA : hexB);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalAlpha = 0.14;
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 512, 512);
+  }
+  return new THREE.CanvasTexture(c);
+}
+for (const n of [
+  { a: "rgba(88,60,180,1)", b: "rgba(30,90,160,1)", pos: [-950, 240, -1100], scale: 1700 },
+  { a: "rgba(160,50,110,1)", b: "rgba(90,40,160,1)", pos: [1100, -180, -800], scale: 1400 },
+  { a: "rgba(20,110,120,1)", b: "rgba(40,70,170,1)", pos: [300, 520, 1200], scale: 1500 },
+]) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: nebulaTexture(n.a, n.b), transparent: true, opacity: 0.4,
+    depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  sp.position.set(...n.pos);
+  sp.scale.set(n.scale, n.scale, 1);
+  scene.add(sp);
 }
 
 // ── camera fly + side panel ───────────────────────────────────────
@@ -335,6 +380,18 @@ window.answerFocus = (nodeIds) => {
   }
   markInteract();
 };
+
+// ── living stars: gentle twinkle, each with its own phase ─────────
+(function twinkleNodes(t) {
+  for (const n of Graph.graphData().nodes) {
+    const obj = n.__threeObj;
+    const flare = obj?.children?.[1];
+    if (!flare || !n.__baseScale) continue;
+    const s = n.__baseScale * (1 + 0.07 * Math.sin(t / 850 + n.id * 2.7));
+    flare.scale.set(s, s, 1);
+  }
+  requestAnimationFrame(twinkleNodes);
+})(0);
 
 // ── slow idle drift ───────────────────────────────────────────────
 let lastInteract = Date.now();

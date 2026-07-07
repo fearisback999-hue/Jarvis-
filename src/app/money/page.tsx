@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useJarvis, financeSummary } from "@/lib/store";
 import { todayKey, fmtMoney, lastNDays } from "@/lib/utils";
 import { useMounted } from "@/hooks/use-mounted";
 import { Card, StatCard, SectionHeader, Button, Input, Select, ProgressBar, EmptyState } from "@/components/ui";
 import { TrendArea, Donut } from "@/components/charts";
-import { Trash2 } from "lucide-react";
+import { ArrowRight, Trash2 } from "lucide-react";
 
 export default function MoneyPage() {
   const mounted = useMounted();
@@ -21,6 +22,9 @@ export default function MoneyPage() {
   const fin = financeSummary(s.transactions);
   const netWorth = s.accounts.reduce((a, acc) => a + acc.balance, 0);
   const goal = s.goals.find((g) => g.horizon === "monthly");
+  const month = todayKey().slice(0, 7);
+  const billsNeeded = s.bills.reduce((a, b) => a + b.amount, 0);
+  const billsRemaining = s.bills.filter((b) => b.lastPaidMonth !== month).reduce((a, b) => a + b.amount, 0);
 
   // 30-day cumulative cash flow
   const days = lastNDays(30);
@@ -67,6 +71,20 @@ export default function MoneyPage() {
           {fin.revenue === 0 ? <EmptyState>No income recorded this month yet.</EmptyState> : <Donut data={donutData} />}
         </Card>
       </div>
+
+      <Link href="/money/bills">
+        <Card className="flex items-center justify-between transition-colors hover:border-white/[0.16]">
+          <div>
+            <div className="text-[13px] font-semibold">Business Bills & Autopay</div>
+            <div className="mt-0.5 text-[12px] text-zinc-500">
+              {billsNeeded > 0
+                ? `${fmtMoney(billsNeeded, 2)} needed this month · ${fmtMoney(billsRemaining, 2)} still due`
+                : "Register recurring expenses, link a bank, pay under hard spending rules"}
+            </div>
+          </div>
+          <ArrowRight size={15} className="text-zinc-600" />
+        </Card>
+      </Link>
 
       {goal && (
         <Card>

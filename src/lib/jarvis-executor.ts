@@ -9,6 +9,7 @@ import { computePrayerTimes, nextPrayer, PRAYER_NAMES, type PrayerName } from ".
 import { generateDayPlan } from "./scheduler";
 import { todayKey, fmtHM, hmToMinutes, fmtDuration, lastNDays } from "./utils";
 import { bridgeCmd, bridgeOnline } from "./desktop-bridge";
+import { billsSummary } from "./spending-guard";
 
 type Json = Record<string, unknown>;
 
@@ -93,6 +94,26 @@ export async function executeJarvisTool(name: string, input: Json): Promise<Json
     case "log_prayer": {
       s.logPrayer(today, input.prayer as PrayerName, input.status as "on_time");
       return { ok: true, logged: input.prayer, status: input.status };
+    }
+    case "get_bills_summary": {
+      const sum = billsSummary(s);
+      return {
+        ...sum,
+        overdue: sum.overdue.map((b) => ({ name: b.name, amount: b.amount, dueDay: b.dueDay })),
+        dueSoon: sum.dueSoon.map((b) => ({ name: b.name, amount: b.amount, dueDay: b.dueDay })),
+        rules: s.spendingRules,
+        note: "Payments can only be approved by the user on the Bills page — never by JARVIS.",
+      };
+    }
+    case "add_bill": {
+      s.addBill({
+        name: String(input.name),
+        amount: Number(input.amount),
+        dueDay: Math.min(28, Math.max(1, Number(input.dueDay ?? 1))),
+        category: String(input.category ?? "other"),
+        autopay: false,
+      });
+      return { ok: true, added: input.name, monthlyTotal: billsSummary(useJarvis.getState()).needed };
     }
     case "get_finance_summary":
       return financeReport();
@@ -311,6 +332,13 @@ export async function localPlanner(text: string): Promise<string> {
     if (!tasks.length) return "No open tasks. Add some and I'll rank them by ROI.";
     return "Highest-ROI actions right now:\n" +
       tasks.map((t, i) => `${i + 1}. ${t.title} — ${PILLARS[t.pillar as Pillar].label}, ROI ${t.roi}`).join("\n");
+  }
+  if (/(bills?|business expenses?|how much.*(need|expenses)|monthly expenses?)/.test(q)) {
+    const sum = billsSummary(s);
+    const bal = sum.balance != null ? ` Bank balance $${sum.balance.toFixed(0)} — ${sum.funded ? "fully funded including your buffer" : "NOT enough to cover what's left plus the buffer"}.` : " Link a bank on the Bills page to check funding.";
+    return `Business expenses for ${sum.month}: $${sum.needed.toFixed(2)} needed, $${sum.paid.toFixed(2)} paid, $${sum.remaining.toFixed(2)} still due` +
+      (sum.overdue.length ? ` (${sum.overdue.length} overdue: ${sum.overdue.map((b) => b.name).join(", ")})` : "") +
+      `.${bal} I can add bills, but only you can approve payments — Bills page.`;
   }
   if (/(money|revenue|profit|income|made this month|finance)/.test(q)) {
     const f = financeReport();

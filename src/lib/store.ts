@@ -62,6 +62,44 @@ export interface Transaction {
 export interface Account { id: string; name: string; kind: "cash" | "bank" | "investment"; balance: number; }
 export interface FinancialGoal { id: string; title: string; target: number; horizon: "monthly" | "quarterly" | "yearly"; }
 
+// Recurring business expenses (bills). Payments only ever go to bills on
+// this list, for exactly the registered amount — the Spending Guard's
+// whitelist.
+export interface Bill {
+  id: string;
+  name: string;
+  amount: number;
+  dueDay: number; // 1-28
+  category: string;
+  autopay: boolean; // JARVIS prepares it when due; you still approve
+  lastPaidMonth?: string; // YYYY-MM — duplicate-payment block
+}
+
+export interface PaymentRecord {
+  id: string;
+  billId: string;
+  name: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  month: string; // YYYY-MM
+}
+
+// Hard limits the Spending Guard enforces on every single payment.
+export interface SpendingRules {
+  monthlyCapUSD: number; // total paid per month can never exceed this
+  perPaymentCapUSD: number; // no single payment above this
+  minBalanceBufferUSD: number; // never let the bank balance dip below this
+}
+
+export interface BankLink {
+  linked: boolean;
+  name?: string;
+  mask?: string;
+  balance?: number; // available balance
+  updatedAt?: string;
+  accessToken?: string; // Plaid access token (device-local; useless without server keys)
+}
+
 export interface Product {
   id: string;
   platform: "tiktok" | "etsy";
@@ -152,6 +190,10 @@ export interface JarvisState {
   transactions: Transaction[];
   accounts: Account[];
   goals: FinancialGoal[];
+  bills: Bill[];
+  payments: PaymentRecord[];
+  spendingRules: SpendingRules;
+  bank: BankLink;
   products: Product[];
   listings: Listing[];
   content: ContentItem[];
@@ -180,6 +222,12 @@ export interface JarvisState {
   addAccount: (a: Omit<Account, "id">) => void;
   addGoal: (g: Omit<FinancialGoal, "id">) => void;
   deleteGoal: (id: string) => void;
+  addBill: (b: Omit<Bill, "id">) => void;
+  updateBill: (id: string, patch: Partial<Bill>) => void;
+  deleteBill: (id: string) => void;
+  recordPayment: (bill: Bill) => void; // ledger write — guard checks happen BEFORE calling this
+  setSpendingRules: (r: Partial<SpendingRules>) => void;
+  setBank: (b: Partial<BankLink>) => void;
   addProduct: (p: Omit<Product, "id">) => void;
   updateProduct: (id: string, patch: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
@@ -248,6 +296,10 @@ export const useJarvis = create<JarvisState>()(
         { id: uid(), name: "Savings", kind: "bank", balance: 0 },
       ],
       goals: [{ id: uid(), title: "Monthly revenue", target: 2000, horizon: "monthly" }],
+      bills: [],
+      payments: [],
+      spendingRules: { monthlyCapUSD: 300, perPaymentCapUSD: 100, minBalanceBufferUSD: 200 },
+      bank: { linked: false },
       products: [],
       listings: [],
       content: [],
@@ -284,6 +336,30 @@ export const useJarvis = create<JarvisState>()(
       addAccount: (a) => set((s) => ({ accounts: [...s.accounts, { ...a, id: uid() }] })),
       addGoal: (g) => set((s) => ({ goals: [...s.goals, { ...g, id: uid() }] })),
       deleteGoal: (id) => set((s) => ({ goals: s.goals.filter((g) => g.id !== id) })),
+
+      addBill: (b) => set((s) => ({ bills: [...s.bills, { ...b, id: uid() }] })),
+      updateBill: (id, patch) => set((s) => ({ bills: s.bills.map((b) => (b.id === id ? { ...b, ...patch } : b)) })),
+      deleteBill: (id) => set((s) => ({ bills: s.bills.filter((b) => b.id !== id) })),
+      recordPayment: (bill) =>
+        set((s) => {
+          const month = todayKey().slice(0, 7);
+          return {
+            payments: [
+              { id: uid(), billId: bill.id, name: bill.name, amount: bill.amount, date: todayKey(), month },
+              ...s.payments,
+            ],
+            bills: s.bills.map((b) => (b.id === bill.id ? { ...b, lastPaidMonth: month } : b)),
+            // every payment lands in the money ledger as a business expense
+            transactions: [
+              { id: uid(), amount: bill.amount, direction: "expense" as const, category: `Bill: ${bill.name}`, source: "other" as const, date: todayKey() },
+              ...s.transactions,
+            ],
+            // reflect it against the linked balance immediately
+            bank: s.bank.balance != null ? { ...s.bank, balance: s.bank.balance - bill.amount } : s.bank,
+          };
+        }),
+      setSpendingRules: (r) => set((s) => ({ spendingRules: { ...s.spendingRules, ...r } })),
+      setBank: (b) => set((s) => ({ bank: { ...s.bank, ...b } })),
 
       addProduct: (p) => set((s) => ({ products: [{ ...p, id: uid() }, ...s.products] })),
       updateProduct: (id, patch) =>

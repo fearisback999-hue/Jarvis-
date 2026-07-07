@@ -92,6 +92,25 @@ export const JARVIS_TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "get_bills_summary",
+    description: "Monthly business expenses: total needed, paid, still due, overdue bills, bank balance, and whether it's fully funded. NOTE: you can see and plan bills but you can NEVER execute a payment — only he can approve payments, on the Bills page.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "add_bill",
+    description: "Register a recurring monthly business expense on the bills whitelist.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: str("Bill name, e.g. 'Printify Premium'"),
+        amount: num("Monthly amount in dollars"),
+        dueDay: num("Day of month it's due (1-28)"),
+        category: str("Category, e.g. software, fees"),
+      },
+      required: ["name", "amount"],
+    },
+  },
+  {
     name: "get_finance_summary",
     description: "Get this month's revenue, expenses, profit, income by source, and net worth.",
     input_schema: { type: "object", properties: {} },

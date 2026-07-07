@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Sparkles, Wallet, Video, Store, Factory, Swords, Dumbbell,
+  LayoutDashboard, Sparkles, Wallet, Receipt, Video, Store, Factory, Swords, Dumbbell,
   HeartPulse, Scale, Moon, CalendarClock, CheckSquare, Settings,
 } from "lucide-react";
 
@@ -12,6 +12,7 @@ const NAV = [
   { href: "/", label: "Command Center", icon: LayoutDashboard },
   { href: "/jarvis", label: "JARVIS", icon: Sparkles },
   { href: "/money", label: "Money", icon: Wallet },
+  { href: "/money/bills", label: "Bills & Autopay", icon: Receipt },
   { href: "/business/pod", label: "POD Automation", icon: Factory },
   { href: "/business/tiktok", label: "TikTok Shop", icon: Video },
   { href: "/business/etsy", label: "Etsy", icon: Store },

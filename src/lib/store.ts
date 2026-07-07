@@ -96,6 +96,18 @@ export interface SpendingRules {
 export interface AdChannel { id: string; name: string; monthlyBudget: number; }
 export interface AdSpend { id: string; channelId: string; amount: number; date: string; note?: string; }
 
+// UGC creator / affiliate program pipeline
+export type CreatorStatus = "prospect" | "contacted" | "negotiating" | "active" | "dropped";
+export interface Creator {
+  id: string;
+  handle: string;
+  platform: "tiktok" | "instagram" | "youtube";
+  status: CreatorStatus;
+  commissionPct: number;
+  gmv: number; // sales attributed to this creator ($)
+  notes?: string;
+}
+
 // Career: Cypress College → UC transfer (ASSIST) → law school → patent law
 export type ClassStatus = "planned" | "in_progress" | "done";
 export interface TransferClass {
@@ -107,7 +119,7 @@ export interface TransferClass {
 }
 export interface LsatScore { id: string; date: string; score: number; }
 export interface Career {
-  targetUC: "UC Berkeley" | "UC Davis";
+  targetUC: string;
   major: "Computer Science" | "Electrical Engineering";
   gpa?: number;
   lsatTarget: number;
@@ -220,6 +232,7 @@ export interface JarvisState {
   bank: BankLink;
   adChannels: AdChannel[];
   adSpends: AdSpend[];
+  creators: Creator[];
   career: Career;
   products: Product[];
   listings: Listing[];
@@ -257,6 +270,9 @@ export interface JarvisState {
   setBank: (b: Partial<BankLink>) => void;
   setAdBudget: (id: string, monthlyBudget: number) => void;
   addAdSpend: (channelId: string, amount: number, note?: string) => void;
+  addCreator: (c: Omit<Creator, "id">) => void;
+  updateCreator: (id: string, patch: Partial<Creator>) => void;
+  deleteCreator: (id: string) => void;
   setCareer: (c: Partial<Career>) => void;
   updateClass: (id: string, status: ClassStatus) => void;
   addTransferClass: (c: Omit<TransferClass, "id">) => void;
@@ -364,6 +380,7 @@ export const useJarvis = create<JarvisState>()(
       bank: { linked: false },
       adChannels: seedAdChannels,
       adSpends: [],
+      creators: [],
       career: {
         targetUC: "UC Berkeley",
         major: "Computer Science",
@@ -445,6 +462,11 @@ export const useJarvis = create<JarvisState>()(
             ],
           };
         }),
+      addCreator: (c) => set((s) => ({ creators: [{ ...c, id: uid() }, ...s.creators] })),
+      updateCreator: (id, patch) =>
+        set((s) => ({ creators: s.creators.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
+      deleteCreator: (id) => set((s) => ({ creators: s.creators.filter((c) => c.id !== id) })),
+
       setCareer: (c) => set((s) => ({ career: { ...s.career, ...c } })),
       updateClass: (id, status) =>
         set((s) => ({ career: { ...s.career, classes: s.career.classes.map((c) => (c.id === id ? { ...c, status } : c)) } })),

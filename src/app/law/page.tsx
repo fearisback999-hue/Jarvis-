@@ -15,6 +15,30 @@ const STATUS_ICON: Record<ClassStatus, React.ReactNode> = {
   planned: <Circle size={15} className="text-zinc-700" />,
 };
 
+// Researched July 2026 from UC admissions + campus TAG pages (2027-28 cycle).
+// Key catch: TAG mostly EXCLUDES CS/engineering at the big-name campuses.
+const UC_INFO: {
+  name: string; rank: string; tagCS: boolean; tagEE: boolean;
+  need: string;
+}[] = [
+  { name: "UC Berkeley", rank: "#1 UC", tagCS: false, tagEE: false,
+    need: "No TAG — open competition. CS (CDSS): ~3.9+ GPA, Calc I/II, Multivariable, Linear Algebra required before transfer. EECS (CoE): hardest transfer in the system — full physics series too. Essays + story matter." },
+  { name: "UCLA", rank: "#2 UC", tagCS: false, tagEE: false,
+    need: "No TAG. CS/EE (Samueli): ~3.9+ GPA, full math + calc-based physics series done. Admits heavily on major-prep completion." },
+  { name: "UC San Diego", rank: "#3 UC", tagCS: false, tagEE: false,
+    need: "No TAG. CS is capped — ~3.8+ GPA and all screening courses (math series, physics, programming) completed. EE slightly less capped." },
+  { name: "UC Irvine", rank: "top-5 UC", tagCS: false, tagEE: true,
+    need: "TAG exists but EXCLUDES all ICS majors (CS). EE via Samueli can TAG — 3.4+ TAG GPA. Non-TAG CS: ~3.8+." },
+  { name: "UC Davis", rank: "top-5 UC", tagCS: false, tagEE: true,
+    need: "TAG for everything EXCEPT business, CS and data science — so EE TAGs (≈3.5 GPA for engineering), CS competes openly (~3.7+)." },
+  { name: "UC Santa Barbara", rank: "top-6 UC", tagCS: false, tagEE: false,
+    need: "TAG excludes the whole College of Engineering — no CS or EE TAG. Open competition ~3.8+ with major prep done." },
+  { name: "UC Riverside", rank: "TAG safety", tagCS: true, tagEE: true,
+    need: "TAG for every major except Art Studio — CS AND EE are GUARANTEED with the TAG GPA (~3.4) + major prep. The insurance policy." },
+  { name: "UC Merced", rank: "TAG safety", tagCS: true, tagEE: true,
+    need: "All majors open to TAG (2026-27 on). Lowest bar — the backstop that guarantees you're at a UC no matter what." },
+];
+
 const ROUTE_STEPS = [
   { title: "Cypress College", desc: "1.5–2 years · knock out the ASSIST class list below with a 3.9+ GPA", icon: GraduationCap },
   { title: "Transfer via ASSIST", desc: "UC Berkeley or UC Davis · CS or EE (TAG is available for Davis — guaranteed admission)", icon: ExternalLink },
@@ -76,9 +100,8 @@ export default function CareerPage() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[14px] font-semibold">ASSIST transfer tracker</h2>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={c.targetUC} onChange={(e) => s.setCareer({ targetUC: e.target.value as typeof c.targetUC })}>
-              <option>UC Berkeley</option>
-              <option>UC Davis</option>
+            <Select value={c.targetUC} onChange={(e) => s.setCareer({ targetUC: e.target.value })}>
+              {UC_INFO.map((u) => <option key={u.name}>{u.name}</option>)}
             </Select>
             <Select value={c.major} onChange={(e) => s.setCareer({ major: e.target.value as typeof c.major })}>
               <option>Computer Science</option>
@@ -138,6 +161,45 @@ export default function CareerPage() {
         <p className="mt-2 text-[11.5px] text-zinc-600">
           Course numbers are seeded from Cypress&apos;s catalog pattern — verify each against the live articulation
           agreement on assist.org (Cypress College → {c.targetUC} → {c.major}) and adjust here.
+        </p>
+      </Card>
+
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[14px] font-semibold">UC targets — TAG status & what each one needs</h2>
+          <span className="text-[11px] text-zinc-600">researched from UC admissions/TAG pages · 2027–28 cycle</span>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          {UC_INFO.map((u) => {
+            const isTarget = c.targetUC === u.name;
+            const tagForMajor = majorKey === "CS" ? u.tagCS : u.tagEE;
+            return (
+              <button
+                key={u.name}
+                onClick={() => s.setCareer({ targetUC: u.name })}
+                className={cn(
+                  "rounded-xl border p-3 text-left transition-colors",
+                  isTarget ? "border-amber-500/40 bg-amber-500/[0.05]" : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.14]"
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-semibold">{u.name}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wide text-zinc-600">{u.rank}</span>
+                    <Badge className={tagForMajor ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-800 text-zinc-500"}>
+                      {tagForMajor ? `TAG ✓ for ${majorKey}` : `no TAG for ${majorKey}`}
+                    </Badge>
+                    {isTarget && <Badge className="bg-amber-500/15 text-amber-400">target</Badge>}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[11.5px] leading-relaxed text-zinc-500">{u.need}</p>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[11.5px] text-zinc-600">
+          The play: run at Berkeley/UCLA/UCSD on grades, and file a TAG with {majorKey === "CS" ? "Riverside or Merced" : "Davis, Irvine, Riverside or Merced"} as
+          the guaranteed floor — TAG costs nothing and locks in a UC seat. Click a campus to set it as your target.
         </p>
       </Card>
 

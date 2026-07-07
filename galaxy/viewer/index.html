@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>JARVIS — Knowledge Galaxy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: #e8e8ee; }
+  #stars { position: fixed; inset: 0; z-index: 0; }
+  #graph { position: fixed; inset: 0; z-index: 1; }
+  #hud { position: fixed; top: 16px; left: 18px; z-index: 3; pointer-events: none; }
+  #hud .title { font-size: 15px; font-weight: 650; letter-spacing: .12em; }
+  #hud .title b { color: #34d399; }
+  #hud .sub { font-size: 11px; color: #8b8b98; margin-top: 3px; letter-spacing: .05em; }
+  #legend { position: fixed; bottom: 16px; left: 18px; z-index: 3; display: flex; gap: 14px;
+    font-size: 11px; color: #9a9aa6; pointer-events: none; }
+  #legend span::before { content: "●"; margin-right: 5px; }
+  #panel { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 4;
+    background: rgba(10,10,14,.88); backdrop-filter: blur(14px);
+    border-left: 1px solid rgba(255,255,255,.09);
+    transform: translateX(105%); transition: transform .35s cubic-bezier(.2,.8,.2,1);
+    padding: 26px 24px; box-sizing: border-box; overflow-y: auto; }
+  #panel.open { transform: translateX(0); }
+  #panel .group { font-size: 10px; text-transform: uppercase; letter-spacing: .18em; margin-bottom: 6px; }
+  #panel h2 { margin: 0 0 12px; font-size: 19px; font-weight: 650; line-height: 1.3; }
+  #panel p { font-size: 13px; line-height: 1.65; color: #b9b9c4; white-space: pre-wrap; }
+  #panel .close { position: absolute; top: 14px; right: 14px; background: none; border: 0;
+    color: #6b6b76; font-size: 18px; cursor: pointer; }
+  #panel .close:hover { color: #fff; }
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="graph"></div>
+<div id="hud">
+  <div class="title">J A R V I S <b>·</b> KNOWLEDGE GALAXY</div>
+  <div class="sub" id="hud-sub">— notes indexed</div>
+</div>
+<div id="legend"></div>
+<aside id="panel">
+  <button class="close" onclick="window.closePanel()">✕</button>
+  <div class="group" id="panel-group"></div>
+  <h2 id="panel-title"></h2>
+  <p id="panel-excerpt"></p>
+</aside>
+
+<script src="graph-data.js"></script>
+<script type="importmap">
+  { "imports": {
+    "three": "./vendor/three.module.js",
+    "three/webgpu": "./vendor/three.webgpu.js",
+    "three/examples/jsm/controls/DragControls.js": "./vendor/DragControls.js",
+    "three/examples/jsm/controls/FlyControls.js": "./vendor/FlyControls.js",
+    "three/examples/jsm/controls/OrbitControls.js": "./vendor/OrbitControls.js",
+    "three/examples/jsm/controls/TrackballControls.js": "./vendor/TrackballControls.js",
+    "three/examples/jsm/postprocessing/EffectComposer.js": "./vendor/EffectComposer.js",
+    "three/examples/jsm/postprocessing/RenderPass.js": "./vendor/RenderPass.js"
+  } }
+</script>
+<script type="module">
+// Libraries are vendored locally (viewer/vendor/) so the galaxy works fully
+// offline — same 3d-force-graph + three builds you'd get from the CDN.
+import * as THREE from "three";
+import ForceGraph3D from "./vendor/3d-force-graph.bundle.mjs";
+
+const COLORS = {
+  business: "#34d399", products: "#38bdf8", advertising: "#a78bfa",
+  operations: "#fbbf24", career: "#fb7185", notes: "#e8e8ee",
+};
+const colorOf = (g) => COLORS[g] ?? "#e8e8ee";
+
+// ── starfield (2D canvas behind the WebGL layer) ──────────────────
+const starCanvas = document.getElementById("stars");
+const sctx = starCanvas.getContext("2d");
+let stars = [];
+function seedStars() {
+  starCanvas.width = innerWidth; starCanvas.height = innerHeight;
+  stars = Array.from({ length: 420 }, () => ({
+    x: Math.random() * innerWidth, y: Math.random() * innerHeight,
+    r: Math.random() * 1.1 + .2, p: Math.random() * Math.PI * 2,
+  }));
+}
+seedStars(); addEventListener("resize", seedStars);
+(function twinkle(t) {
+  sctx.clearRect(0, 0, starCanvas.width, starCanvas.height);
+  for (const s of stars) {
+    const a = .35 + .45 * Math.abs(Math.sin(t / 2400 + s.p));
+    sctx.fillStyle = `rgba(255,255,255,${a})`;
+    sctx.beginPath(); sctx.arc(s.x, s.y, s.r, 0, 7); sctx.fill();
+  }
+  requestAnimationFrame(twinkle);
+})(0);
+
+// ── neighbor map (numeric ids = array indexes) ────────────────────
+const neighbors = new Map(GRAPH.nodes.map((n) => [n.id, new Set()]));
+for (const l of GRAPH.links) {
+  const a = typeof l.source === "object" ? l.source.id : l.source;
+  const b = typeof l.target === "object" ? l.target.id : l.target;
+  neighbors.get(a).add(b); neighbors.get(b).add(a);
+}
+
+let selected = null; // node id or null
+const isLit = (id) => selected === null || id === selected || neighbors.get(selected).has(id);
+
+// glow sprite per node
+const spriteCache = new Map();
+function glowTexture(color, bright) {
+  const key = color + bright;
+  if (spriteCache.has(key)) return spriteCache.get(key);
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, "#ffffff");
+  grad.addColorStop(0.25, color);
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad; g.globalAlpha = bright ? 1 : 0.28;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  spriteCache.set(key, tex);
+  return tex;
+}
+
+const Graph = ForceGraph3D()(document.getElementById("graph"))
+  .graphData(GRAPH)
+  .backgroundColor("rgba(0,0,0,0)")
+  .showNavInfo(false)
+  .nodeLabel((n) => `<div style="font:12px Inter,sans-serif;color:#fff;background:rgba(8,8,12,.85);padding:4px 8px;border-radius:6px">${n.label}</div>`)
+  .nodeThreeObject((n) => {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTexture(colorOf(n.group), isLit(n.id)),
+      transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }));
+    const s = n.id === selected ? 17 : 11;
+    sprite.scale.set(s, s, 1);
+    return sprite;
+  })
+  .linkColor((l) => {
+    const a = typeof l.source === "object" ? l.source.id : l.source;
+    const b = typeof l.target === "object" ? l.target.id : l.target;
+    return selected !== null && (a === selected || b === selected) ? "#7dd3fc" : "rgba(140,150,190,0.9)";
+  })
+  .linkWidth((l) => {
+    const a = typeof l.source === "object" ? l.source.id : l.source;
+    const b = typeof l.target === "object" ? l.target.id : l.target;
+    return selected !== null && (a === selected || b === selected) ? 1.4 : 0.3;
+  })
+  .linkOpacity(0.25)
+  .onNodeClick((n) => window.focusNode(n.id))
+  .onBackgroundClick(() => window.closePanel());
+
+// ── camera fly + side panel ───────────────────────────────────────
+const panel = document.getElementById("panel");
+window.focusNode = (id) => {
+  const n = Graph.graphData().nodes[id];
+  if (!n) return;
+  selected = id;
+  Graph.nodeThreeObject(Graph.nodeThreeObject()); // rebuild sprites
+  Graph.linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
+  const dist = 75;
+  const r = 1 + dist / Math.hypot(n.x || 1, n.y || 1, n.z || 1);
+  Graph.cameraPosition({ x: n.x * r, y: n.y * r, z: n.z * r }, n, 1400);
+  document.getElementById("panel-group").textContent = n.group;
+  document.getElementById("panel-group").style.color = colorOf(n.group);
+  document.getElementById("panel-title").textContent = n.label;
+  document.getElementById("panel-excerpt").textContent = n.excerpt;
+  panel.classList.add("open");
+  markInteract();
+};
+window.closePanel = () => {
+  selected = null;
+  panel.classList.remove("open");
+  Graph.nodeThreeObject(Graph.nodeThreeObject());
+  Graph.linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth());
+  markInteract();
+};
+
+// ── slow idle drift ───────────────────────────────────────────────
+let lastInteract = Date.now();
+const markInteract = () => (lastInteract = Date.now());
+["pointerdown", "wheel", "keydown"].forEach((e) => addEventListener(e, markInteract, true));
+let angle = 0;
+setInterval(() => {
+  if (Date.now() - lastInteract < 6000 || selected !== null) return;
+  angle += 0.00065;
+  const d = 420;
+  Graph.cameraPosition({ x: d * Math.sin(angle), y: 60 * Math.sin(angle / 3), z: d * Math.cos(angle) });
+}, 30);
+
+// HUD + legend
+document.getElementById("hud-sub").textContent =
+  `${GRAPH.nodes.length} notes indexed · ${GRAPH.links.length} connections`;
+const groups = [...new Set(GRAPH.nodes.map((n) => n.group))];
+document.getElementById("legend").innerHTML = groups
+  .map((g) => `<span style="color:${colorOf(g)}">${g}</span>`)
+  .join("");
+</script>
+</body>
+</html>

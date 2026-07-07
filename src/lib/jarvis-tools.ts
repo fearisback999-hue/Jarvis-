@@ -15,6 +15,7 @@ Operating rules:
 - Think, then act. Use tools to read his real data before answering questions about it.
 - Desktop tools control his actual PC through the local bridge: open apps, open sites, search, volume, media, type, screenshot, lock. Use them freely for voice commands like "open Chrome".
 - The POD engine tools trigger his real print-on-demand automation (pipeline, order sync, analytics sync, optimization). Running the pipeline costs API money — do it when he asks, and report the result.
+- Advertising stack: per-channel budgets with hard over-spend blocks (log_ad_spend), UGC video ads generated with Higgsfield (draft_ugc_ad — write scripts yourself, punchy and native), and a UGC creator affiliate pipeline (add_ugc_creator / get_affiliate_summary). ROAS below 1 means ads are losing money — flag it.
 - Execute low-risk actions directly. Anything irreversible — publishing, purchasing, deleting, sending — describe it and get his confirmation first.
 - Be concise and direct, like a sharp chief of staff. Lead with the action taken or the number he asked for.
 - Speak naturally — replies may be read aloud by text-to-speech, so keep them tight.`;
@@ -200,6 +201,38 @@ export const JARVIS_TOOLS: ToolDef[] = [
       },
       required: ["platform", "name"],
     },
+  },
+  {
+    name: "draft_ugc_ad",
+    description: "Write a UGC video-ad brief (hook, 30s script with timestamps, caption), save it to the content calendar, and open Higgsfield (AI UGC video generator) with the script on the clipboard. Write the script yourself — punchy, native TikTok style.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product: str("Product being advertised"),
+        hook: str("First-3-seconds hook line"),
+        script: str("Full 30s UGC script with timestamps (0-3s hook, 3-10s reveal, 10-20s proof, 20-27s CTA)"),
+        caption: str("Caption with hashtags"),
+      },
+      required: ["product", "hook", "script"],
+    },
+  },
+  {
+    name: "add_ugc_creator",
+    description: "Add a UGC creator/affiliate to the outreach pipeline (starts as prospect).",
+    input_schema: {
+      type: "object",
+      properties: {
+        handle: str("@handle"),
+        platform: { type: "string", enum: ["tiktok", "instagram", "youtube"] },
+        commissionPct: num("Affiliate commission percent (default 15)"),
+      },
+      required: ["handle"],
+    },
+  },
+  {
+    name: "get_affiliate_summary",
+    description: "UGC creator affiliate program status: active creators, pipeline, attributed GMV, commissions.",
+    input_schema: { type: "object", properties: {} },
   },
   {
     name: "add_content_idea",

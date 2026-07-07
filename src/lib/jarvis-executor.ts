@@ -187,6 +187,39 @@ export async function executeJarvisTool(name: string, input: Json): Promise<Json
       });
       return { ok: true, added: input.name };
     }
+    case "draft_ugc_ad": {
+      const brief = {
+        hook: String(input.hook),
+        script: String(input.script),
+        caption: input.caption ? String(input.caption) : `#tiktokshop #tiktokmademebuyit`,
+      };
+      s.addContent({ ...brief, posted: false, views: 0, sales: 0 });
+      try { await navigator.clipboard.writeText(brief.script); } catch { /* clipboard may be blocked */ }
+      if (await bridgeOnline()) await bridgeCmd("open_url", { url: "https://higgsfield.ai" });
+      else window.open("https://higgsfield.ai", "_blank", "noopener");
+      return { ok: true, saved: `UGC brief for ${input.product}`, note: "Brief in the content calendar, script on the clipboard, Higgsfield open." };
+    }
+    case "add_ugc_creator": {
+      s.addCreator({
+        handle: String(input.handle).replace(/^@?/, "@"),
+        platform: (input.platform as "tiktok") ?? "tiktok",
+        status: "prospect",
+        commissionPct: Number(input.commissionPct ?? 15),
+        gmv: 0,
+      });
+      return { ok: true, added: input.handle, pipeline: useJarvis.getState().creators.length };
+    }
+    case "get_affiliate_summary": {
+      const cs = s.creators;
+      return {
+        total: cs.length,
+        active: cs.filter((c) => c.status === "active").length,
+        pipeline: cs.filter((c) => ["prospect", "contacted", "negotiating"].includes(c.status)).length,
+        gmvAttributed: cs.reduce((a, c) => a + c.gmv, 0),
+        avgCommissionPct: cs.length ? Math.round(cs.reduce((a, c) => a + c.commissionPct, 0) / cs.length) : null,
+        creators: cs.map((c) => ({ handle: c.handle, platform: c.platform, status: c.status, gmv: c.gmv })),
+      };
+    }
     case "add_content_idea": {
       s.addContent({
         hook: String(input.hook),
@@ -284,6 +317,37 @@ export async function localPlanner(text: string): Promise<string> {
     const app = appMatch[2].replace("google chrome", "chrome").replace(/^vs ?code$|visual studio code/, "vs code");
     const r = await executeJarvisTool("desktop_open_app", { app });
     return r.ok ? `Opening ${app}.` : String(r.error ?? r.err ?? "Bridge offline.");
+  }
+  // "open youtube to a boxing highlights video" / "play lofi beats on youtube"
+  const ytMatch =
+    q.match(/(?:open|play)(?: up)? youtube (?:to|for|and (?:search|play)(?: for)?|on) (?:a |an |some )?(.+)/) ??
+    q.match(/play (.+?) on youtube/);
+  if (ytMatch) {
+    const query = ytMatch[1].replace(/\s*videos?$/, "").trim();
+    const r = await executeJarvisTool("open_url", { url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}` });
+    return r.ok ? `Opening YouTube — searching for ${query}.` : String(r.error ?? "Couldn't open YouTube.");
+  }
+  const ugcMatch = q.match(/(?:draft|make|create|write)(?: me)?(?: a| an)? ugc (?:ad|brief|video)(?: for| about)? (.+)/);
+  if (ugcMatch) {
+    const product = ugcMatch[1].trim();
+    await executeJarvisTool("draft_ugc_ad", {
+      product,
+      hook: `POV: you finally found ${product} that actually works`,
+      script: `[UGC BRIEF — ${product}]\n0-3s HOOK: cold open on the problem, face to camera.\n3-10s REVEAL: ${product} in hand, one-line benefit.\n10-20s PROOF: real-setting demo, 2 quick cuts, text overlays.\n20-27s CTA: "it's in my showcase" + price anchor.\nDeliverables: 3 hook variants, 9:16, native captions.`,
+      caption: `this ${product} is different 😳 #tiktokshop #tiktokmademebuyit`,
+    });
+    return `UGC brief for "${product}" saved to the content calendar, script copied, Higgsfield open. With the API key set I'll write sharper custom scripts.`;
+  }
+  if (/(affiliate|creator)s?( program| pipeline| summary)?/.test(q) && /(how|status|summary|check|many)/.test(q)) {
+    const r = (await executeJarvisTool("get_affiliate_summary", {})) as { total: number; active: number; pipeline: number; gmvAttributed: number };
+    return r.total === 0
+      ? "No creators in the affiliate pipeline yet — add them on the Advertising page or say 'add creator @handle'."
+      : `Affiliate program: ${r.active} active creators, ${r.pipeline} in the pipeline, $${r.gmvAttributed.toFixed(0)} GMV attributed.`;
+  }
+  const addCreatorMatch = q.match(/add (?:ugc )?creator @?([\w.]+)/);
+  if (addCreatorMatch) {
+    await executeJarvisTool("add_ugc_creator", { handle: addCreatorMatch[1] });
+    return `@${addCreatorMatch[1]} added to the affiliate pipeline as a prospect.`;
   }
   const siteMatch = q.match(/open (up )?(youtube|gmail|tiktok|etsy|printify|instagram|twitter|x\.com|amazon|github)/);
   if (siteMatch) {

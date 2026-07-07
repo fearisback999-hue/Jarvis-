@@ -1,0 +1,2 @@
+# Business Overview
+The operation runs two engines: a [[POD Automation Engine]] selling print-on-demand designs on Etsy, and a [[TikTok Shop Strategy]] built on short-form video. Monthly operating budget is about $1,500 — see [[Monthly Operating Budget]]. The north star: replace a salary with [[Passive Income Streams]] before transferring to a UC. Revenue is tracked in [[Revenue Tracking]], and every dollar of spend passes the [[Spending Guard Rules]].

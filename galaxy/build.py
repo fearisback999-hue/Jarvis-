@@ -23,7 +23,8 @@ WIKILINK = re.compile(r"\[\[([^\]|#]+)")
 
 def collect():
     notes = []
-    for dirpath, _dirs, files in os.walk(NOTES_DIR):
+    for dirpath, dirs, files in os.walk(NOTES_DIR):
+        dirs.sort()  # deterministic order — node ids must match server.py
         for fname in sorted(files):
             if not fname.endswith(".md"):
                 continue

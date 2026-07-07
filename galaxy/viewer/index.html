@@ -15,6 +15,11 @@
   #hud .sub { font-size: 11px; color: #8b8b98; margin-top: 3px; letter-spacing: .05em; }
   #legend { position: fixed; bottom: 16px; left: 18px; z-index: 3; display: flex; gap: 14px;
     font-size: 11px; color: #9a9aa6; pointer-events: none; }
+  #views { position: fixed; top: 16px; right: 16px; z-index: 3; display: flex; gap: 6px; }
+  #views button { background: rgba(12,12,18,.7); border: 1px solid rgba(255,255,255,.12);
+    color: #c9c9d4; font: 11px Inter, sans-serif; padding: 6px 10px; border-radius: 9px;
+    cursor: pointer; backdrop-filter: blur(8px); letter-spacing: .03em; }
+  #views button:hover { background: rgba(255,255,255,.12); color: #fff; }
   #legend span::before { content: "●"; margin-right: 5px; }
   #panel { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 4;
     background: rgba(10,10,14,.88); backdrop-filter: blur(14px);
@@ -69,6 +74,7 @@
   <div class="title">J A R V I S <b>·</b> KNOWLEDGE GALAXY</div>
   <div class="sub" id="hud-sub">— notes indexed</div>
 </div>
+<div id="views"></div>
 <div id="legend"></div>
 <div id="askwrap">
   <div id="answer"></div>
@@ -105,6 +111,7 @@
 import * as THREE from "three";
 import ForceGraph3D from "./vendor/3d-force-graph.bundle.mjs";
 import { UnrealBloomPass } from "./vendor/UnrealBloomPass.js";
+import { buildMilkyWay } from "./galaxy-env.js";
 
 const COLORS = {
   business: "#34d399", products: "#38bdf8", advertising: "#a78bfa",
@@ -231,61 +238,52 @@ Graph.postProcessingComposer().addPass(
 
 const scene = Graph.scene();
 
-// deep starfield — two shells of points with real parallax
-function makeStars(count, rMin, rMax, size) {
+// ── the Milky Way itself — procedural, astronomy-informed ─────────
+// Your notes float just above the galactic disk, near the core.
+const milkyWay = buildMilkyWay(THREE);
+milkyWay.position.set(0, -300, 0);
+milkyWay.rotation.set(0.40, 0, 0.10);
+scene.add(milkyWay);
+
+// faint extragalactic backdrop (distant field stars)
+{
   const geo = new THREE.BufferGeometry();
-  const pos = new Float32Array(count * 3);
-  const col = new Float32Array(count * 3);
-  const palette = [new THREE.Color("#ffffff"), new THREE.Color("#bcd7ff"), new THREE.Color("#ffe0c2"), new THREE.Color("#dceaff")];
-  for (let i = 0; i < count; i++) {
-    const r = rMin + Math.random() * (rMax - rMin);
+  const N = 2200, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const palette = [new THREE.Color("#ffffff"), new THREE.Color("#bcd7ff"), new THREE.Color("#ffe0c2")];
+  for (let i = 0; i < N; i++) {
+    const r = 3200 + Math.random() * 1600;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
     pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
     pos[i * 3 + 1] = r * Math.cos(phi);
     pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
     const c = palette[(Math.random() * palette.length) | 0];
-    const dim = 0.35 + Math.random() * 0.65;
+    const dim = 0.3 + Math.random() * 0.6;
     col[i * 3] = c.r * dim; col[i * 3 + 1] = c.g * dim; col[i * 3 + 2] = c.b * dim;
   }
   geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-  return new THREE.Points(geo, new THREE.PointsMaterial({
-    size, vertexColors: true, transparent: true, opacity: 0.9,
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 2.2, vertexColors: true, transparent: true, opacity: 0.8,
     depthWrite: false, sizeAttenuation: true,
-  }));
+  })));
 }
-scene.add(makeStars(3500, 1200, 2600, 2.4));
-scene.add(makeStars(1500, 700, 1200, 1.4));
 
-// nebula clouds — huge soft additive sprites far behind the graph
-function nebulaTexture(hexA, hexB) {
-  const c = document.createElement("canvas"); c.width = c.height = 512;
-  const g = c.getContext("2d");
-  for (let i = 0; i < 5; i++) {
-    const x = 130 + Math.random() * 250, y = 130 + Math.random() * 250, r = 120 + Math.random() * 130;
-    const grad = g.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, i % 2 ? hexA : hexB);
-    grad.addColorStop(1, "rgba(0,0,0,0)");
-    g.globalAlpha = 0.16;
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 512, 512);
-  }
-  return new THREE.CanvasTexture(c);
-}
-const NEBULAE = [
-  { a: "rgba(88,60,180,1)", b: "rgba(30,90,160,1)", pos: [-950, 240, -1100], scale: 1700 },
-  { a: "rgba(160,50,110,1)", b: "rgba(90,40,160,1)", pos: [1100, -180, -800], scale: 1400 },
-  { a: "rgba(20,110,120,1)", b: "rgba(40,70,170,1)", pos: [300, 520, 1200], scale: 1500 },
-];
-for (const n of NEBULAE) {
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: nebulaTexture(n.a, n.b), transparent: true, opacity: 0.5,
-    depthWrite: false, blending: THREE.AdditiveBlending,
-  }));
-  sp.position.set(...n.pos);
-  sp.scale.set(n.scale, n.scale, 1);
-  scene.add(sp);
+// ── explorable camera: view presets ───────────────────────────────
+const GALAXY_CENTER = { x: 0, y: -300, z: 0 };
+const VIEWS = {
+  "My Notes": [{ x: 0, y: 70, z: 430 }, { x: 0, y: 0, z: 0 }],
+  "Overview": [{ x: 700, y: 480, z: 950 }, GALAXY_CENTER],
+  "Face-on": [{ x: 300, y: 3100, z: 1300 }, GALAXY_CENTER],
+  "Edge-on": [{ x: 2900, y: -160, z: 300 }, GALAXY_CENTER],
+  "Core dive": [{ x: 160, y: -160, z: 420 }, GALAXY_CENTER],
+};
+const viewsEl = document.getElementById("views");
+for (const [name, [pos, look]] of Object.entries(VIEWS)) {
+  const b = document.createElement("button");
+  b.textContent = name;
+  b.onclick = () => { Graph.cameraPosition(pos, look, 1800); markInteract(); };
+  viewsEl.appendChild(b);
 }
 
 // ── camera fly + side panel ───────────────────────────────────────

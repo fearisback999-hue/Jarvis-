@@ -91,6 +91,30 @@ export interface SpendingRules {
   minBalanceBufferUSD: number; // never let the bank balance dip below this
 }
 
+// Advertising budgets — the variable half of the ~$1,500/mo operating cost
+// (bills are the fixed half). Spend is logged against per-channel caps.
+export interface AdChannel { id: string; name: string; monthlyBudget: number; }
+export interface AdSpend { id: string; channelId: string; amount: number; date: string; note?: string; }
+
+// Career: Cypress College → UC transfer (ASSIST) → law school → patent law
+export type ClassStatus = "planned" | "in_progress" | "done";
+export interface TransferClass {
+  id: string;
+  name: string;
+  cypressCourse: string;
+  appliesTo: "CS" | "EE" | "Both" | "GE";
+  status: ClassStatus;
+}
+export interface LsatScore { id: string; date: string; score: number; }
+export interface Career {
+  targetUC: "UC Berkeley" | "UC Davis";
+  major: "Computer Science" | "Electrical Engineering";
+  gpa?: number;
+  lsatTarget: number;
+  lsatScores: LsatScore[];
+  classes: TransferClass[];
+}
+
 export interface BankLink {
   linked: boolean;
   name?: string;
@@ -194,6 +218,9 @@ export interface JarvisState {
   payments: PaymentRecord[];
   spendingRules: SpendingRules;
   bank: BankLink;
+  adChannels: AdChannel[];
+  adSpends: AdSpend[];
+  career: Career;
   products: Product[];
   listings: Listing[];
   content: ContentItem[];
@@ -228,6 +255,12 @@ export interface JarvisState {
   recordPayment: (bill: Bill) => void; // ledger write — guard checks happen BEFORE calling this
   setSpendingRules: (r: Partial<SpendingRules>) => void;
   setBank: (b: Partial<BankLink>) => void;
+  setAdBudget: (id: string, monthlyBudget: number) => void;
+  addAdSpend: (channelId: string, amount: number, note?: string) => void;
+  setCareer: (c: Partial<Career>) => void;
+  updateClass: (id: string, status: ClassStatus) => void;
+  addTransferClass: (c: Omit<TransferClass, "id">) => void;
+  addLsatScore: (score: number) => void;
   addProduct: (p: Omit<Product, "id">) => void;
   updateProduct: (id: string, patch: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
@@ -276,6 +309,35 @@ const seedMilestones: LawMilestone[] = [
 
 const defaultSkills = Object.fromEntries(BOXING_SKILLS.map((s) => [s, 5])) as Record<BoxingSkill, number>;
 
+// ~$1,500/mo total operating budget (per the earlier planning session) —
+// every number is editable on the Advertising page.
+const seedAdChannels: AdChannel[] = [
+  { id: uid(), name: "TikTok Ads", monthlyBudget: 800 },
+  { id: uid(), name: "Etsy Ads", monthlyBudget: 300 },
+  { id: uid(), name: "API & software costs", monthlyBudget: 150 },
+  { id: uid(), name: "POD samples & other", monthlyBudget: 250 },
+];
+
+// Cypress College → UC transfer checklist. Course numbers follow Cypress's
+// catalog style but MUST be verified against assist.org for the chosen
+// UC + major — the page links straight to ASSIST.
+const seedClasses: TransferClass[] = [
+  { id: uid(), name: "English Composition", cypressCourse: "ENGL 100 C", appliesTo: "GE", status: "planned" },
+  { id: uid(), name: "Critical Thinking / Writing", cypressCourse: "ENGL 103 C", appliesTo: "GE", status: "planned" },
+  { id: uid(), name: "Calculus I", cypressCourse: "MATH 150A C", appliesTo: "Both", status: "planned" },
+  { id: uid(), name: "Calculus II", cypressCourse: "MATH 150B C", appliesTo: "Both", status: "planned" },
+  { id: uid(), name: "Multivariable Calculus", cypressCourse: "MATH 250A C", appliesTo: "Both", status: "planned" },
+  { id: uid(), name: "Linear Algebra & Differential Equations", cypressCourse: "MATH 250B C", appliesTo: "Both", status: "planned" },
+  { id: uid(), name: "Physics: Mechanics (calc-based)", cypressCourse: "PHYS 221 C", appliesTo: "Both", status: "planned" },
+  { id: uid(), name: "Physics: Electricity & Magnetism", cypressCourse: "PHYS 222 C", appliesTo: "Both", status: "planned" },
+  { id: uid(), name: "Physics: Waves, Optics, Thermo", cypressCourse: "PHYS 223 C", appliesTo: "EE", status: "planned" },
+  { id: uid(), name: "Intro Programming (C++)", cypressCourse: "CSCI 133 C", appliesTo: "Both", status: "planned" },
+  { id: uid(), name: "Advanced C++ / OOP", cypressCourse: "CSCI 233 C", appliesTo: "CS", status: "planned" },
+  { id: uid(), name: "Data Structures", cypressCourse: "CSCI 241 C", appliesTo: "CS", status: "planned" },
+  { id: uid(), name: "Discrete Structures", cypressCourse: "verify on ASSIST", appliesTo: "CS", status: "planned" },
+  { id: uid(), name: "General Chemistry (EE @ Davis)", cypressCourse: "CHEM 111A C", appliesTo: "EE", status: "planned" },
+];
+
 export const useJarvis = create<JarvisState>()(
   persist(
     (set) => ({
@@ -300,6 +362,15 @@ export const useJarvis = create<JarvisState>()(
       payments: [],
       spendingRules: { monthlyCapUSD: 300, perPaymentCapUSD: 100, minBalanceBufferUSD: 200 },
       bank: { linked: false },
+      adChannels: seedAdChannels,
+      adSpends: [],
+      career: {
+        targetUC: "UC Berkeley",
+        major: "Computer Science",
+        lsatTarget: 175,
+        lsatScores: [],
+        classes: seedClasses,
+      },
       products: [],
       listings: [],
       content: [],
@@ -360,6 +431,29 @@ export const useJarvis = create<JarvisState>()(
         }),
       setSpendingRules: (r) => set((s) => ({ spendingRules: { ...s.spendingRules, ...r } })),
       setBank: (b) => set((s) => ({ bank: { ...s.bank, ...b } })),
+
+      setAdBudget: (id, monthlyBudget) =>
+        set((s) => ({ adChannels: s.adChannels.map((c) => (c.id === id ? { ...c, monthlyBudget: Math.max(0, monthlyBudget) } : c)) })),
+      addAdSpend: (channelId, amount, note) =>
+        set((s) => {
+          const channel = s.adChannels.find((c) => c.id === channelId);
+          return {
+            adSpends: [{ id: uid(), channelId, amount, date: todayKey(), note }, ...s.adSpends],
+            transactions: [
+              { id: uid(), amount, direction: "expense" as const, category: `Ads: ${channel?.name ?? "unknown"}`, source: "other" as const, date: todayKey(), notes: note },
+              ...s.transactions,
+            ],
+          };
+        }),
+      setCareer: (c) => set((s) => ({ career: { ...s.career, ...c } })),
+      updateClass: (id, status) =>
+        set((s) => ({ career: { ...s.career, classes: s.career.classes.map((c) => (c.id === id ? { ...c, status } : c)) } })),
+      addTransferClass: (c) =>
+        set((s) => ({ career: { ...s.career, classes: [...s.career.classes, { ...c, id: uid() }] } })),
+      addLsatScore: (score) =>
+        set((s) => ({
+          career: { ...s.career, lsatScores: [...s.career.lsatScores, { id: uid(), date: todayKey(), score }] },
+        })),
 
       addProduct: (p) => set((s) => ({ products: [{ ...p, id: uid() }, ...s.products] })),
       updateProduct: (id, patch) =>

@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Sparkles, Wallet, Receipt, Video, Store, Factory, Swords, Dumbbell,
-  HeartPulse, Scale, Moon, CalendarClock, CheckSquare, Settings,
+  LayoutDashboard, Sparkles, Wallet, Receipt, Video, Store, Factory, Megaphone, Swords,
+  Dumbbell, HeartPulse, Scale, Moon, CalendarClock, CheckSquare, Settings,
 } from "lucide-react";
 
 const NAV = [
@@ -16,13 +16,14 @@ const NAV = [
   { href: "/business/pod", label: "POD Automation", icon: Factory },
   { href: "/business/tiktok", label: "TikTok Shop", icon: Video },
   { href: "/business/etsy", label: "Etsy", icon: Store },
+  { href: "/business/ads", label: "Advertising", icon: Megaphone },
   { href: "/prayer", label: "Prayer", icon: Moon },
   { href: "/schedule", label: "Schedule", icon: CalendarClock },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/gym", label: "Gym", icon: Dumbbell },
   { href: "/boxing", label: "Boxing", icon: Swords },
   { href: "/health", label: "Health", icon: HeartPulse },
-  { href: "/law", label: "Law", icon: Scale },
+  { href: "/law", label: "Career", icon: Scale },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

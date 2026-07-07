@@ -45,6 +45,7 @@ export default function BillsPage() {
 
   const month = todayKey().slice(0, 7);
   const sum = billsSummary(s);
+  const adBudgetTotal = s.adChannels.reduce((a, c) => a + c.monthlyBudget, 0);
 
   const refreshBalance = async () => {
     if (!s.bank.accessToken) return;
@@ -142,6 +143,15 @@ export default function BillsPage() {
           sub={sum.funded == null ? "link a bank below" : sum.funded ? "fully funded incl. buffer" : "NOT enough to cover remaining bills + buffer"}
         />
       </div>
+
+      <Card className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+        <div>
+          <span className="font-semibold">Full monthly operating cost:</span>{" "}
+          <span className="tabular text-emerald-400">{fmtMoney(sum.needed + adBudgetTotal)}</span>
+          <span className="text-zinc-500"> = {fmtMoney(sum.needed)} fixed bills + {fmtMoney(adBudgetTotal)} advertising & variable budgets</span>
+        </div>
+        <a href="/business/ads" className="text-[12px] text-zinc-500 hover:text-zinc-300">Manage ad budgets →</a>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

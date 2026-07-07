@@ -115,6 +115,38 @@ export async function executeJarvisTool(name: string, input: Json): Promise<Json
       });
       return { ok: true, added: input.name, monthlyTotal: billsSummary(useJarvis.getState()).needed };
     }
+    case "get_ad_budget_summary": {
+      const month = today.slice(0, 7);
+      const monthSpends = s.adSpends.filter((x) => x.date.startsWith(month));
+      const totalBudget = s.adChannels.reduce((a, c) => a + c.monthlyBudget, 0);
+      const totalSpent = monthSpends.reduce((a, x) => a + x.amount, 0);
+      const fin = financeSummary(s.transactions);
+      const billsFixed = s.bills.reduce((a, b) => a + b.amount, 0);
+      return {
+        month,
+        channels: s.adChannels.map((c) => ({
+          name: c.name,
+          budget: c.monthlyBudget,
+          spent: monthSpends.filter((x) => x.channelId === c.id).reduce((a, x) => a + x.amount, 0),
+        })),
+        totalBudget, totalSpent, remaining: totalBudget - totalSpent,
+        roas: totalSpent > 0 ? Math.round((fin.revenue / totalSpent) * 100) / 100 : null,
+        fullMonthlyOperatingCost: billsFixed + totalBudget,
+      };
+    }
+    case "log_ad_spend": {
+      const q = String(input.channel).toLowerCase();
+      const channel = s.adChannels.find((c) => c.name.toLowerCase().includes(q));
+      if (!channel) return { ok: false, error: `No ad channel matching "${input.channel}"`, channels: s.adChannels.map((c) => c.name) };
+      const month = today.slice(0, 7);
+      const spent = s.adSpends.filter((x) => x.channelId === channel.id && x.date.startsWith(month)).reduce((a, x) => a + x.amount, 0);
+      const amt = Number(input.amount);
+      if (spent + amt > channel.monthlyBudget) {
+        return { ok: false, blocked: true, error: `Over budget: ${channel.name} has $${(channel.monthlyBudget - spent).toFixed(2)} remaining of $${channel.monthlyBudget}. Not logged — raise the budget on the Advertising page if intentional.` };
+      }
+      s.addAdSpend(channel.id, amt, input.note ? String(input.note) : undefined);
+      return { ok: true, logged: amt, channel: channel.name, remainingThisMonth: channel.monthlyBudget - spent - amt };
+    }
     case "get_finance_summary":
       return financeReport();
     case "add_transaction": {
@@ -332,6 +364,14 @@ export async function localPlanner(text: string): Promise<string> {
     if (!tasks.length) return "No open tasks. Add some and I'll rank them by ROI.";
     return "Highest-ROI actions right now:\n" +
       tasks.map((t, i) => `${i + 1}. ${t.title} — ${PILLARS[t.pillar as Pillar].label}, ROI ${t.roi}`).join("\n");
+  }
+  if (/(ad budget|advertising|ad spend|roas)/.test(q)) {
+    const r = (await executeJarvisTool("get_ad_budget_summary", {})) as {
+      totalBudget: number; totalSpent: number; remaining: number; roas: number | null; fullMonthlyOperatingCost: number;
+    };
+    return `Advertising this month: $${r.totalSpent.toFixed(2)} spent of $${r.totalBudget} budgeted ($${r.remaining.toFixed(2)} left). ` +
+      (r.roas != null ? `ROAS ${r.roas}×. ` : "") +
+      `Full monthly operating cost: $${r.fullMonthlyOperatingCost} (bills + ad budgets).`;
   }
   if (/(bills?|business expenses?|how much.*(need|expenses)|monthly expenses?)/.test(q)) {
     const sum = billsSummary(s);

@@ -111,6 +111,24 @@ export const JARVIS_TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "get_ad_budget_summary",
+    description: "Advertising budgets per channel, spend this month, remaining, ROAS, and the full monthly operating cost (bills + ad budgets).",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "log_ad_spend",
+    description: "Log advertising spend against a channel budget. BLOCKED automatically if it would exceed the channel's monthly budget.",
+    input_schema: {
+      type: "object",
+      properties: {
+        channel: str("Channel name, e.g. 'TikTok Ads', 'Etsy Ads'"),
+        amount: num("Amount spent in dollars"),
+        note: str("Optional campaign/product note"),
+      },
+      required: ["channel", "amount"],
+    },
+  },
+  {
     name: "get_finance_summary",
     description: "Get this month's revenue, expenses, profit, income by source, and net worth.",
     input_schema: { type: "object", properties: {} },

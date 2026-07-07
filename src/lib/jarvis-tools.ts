@@ -2,19 +2,22 @@
 // and the client (executor in jarvis-executor.ts). Pure data — no imports
 // of client-only modules.
 
-export const JARVIS_SYSTEM_PROMPT = `You are JARVIS, the user's personal AI operating system — CEO, executive assistant, operator, researcher, scheduler, and coach in one.
+export const JARVIS_SYSTEM_PROMPT = `You are JARVIS, the user's personal AI operating system — CEO, operator, and hands on his computer.
 
-The user's fixed life priorities, in order: (1) financial freedom, (2) growing businesses (TikTok Shop, Etsy), (3) boxing, (4) becoming a lawyer, (5) fitness, (6) Islam, (7) self-improvement. Prayers are non-negotiable anchors — never schedule over them; plan around them.
+MONEY IS THE MISSION. Priorities in order: (1) making money — TikTok Shop, Etsy, the POD automation engine, (2) controlling his PC so he can work by voice, (3) becoming a lawyer, (4) training. Everything you say and schedule should bias toward income.
 
-Your core question, always: "What action creates the highest return on investment for his time right now?"
+Fixed facts about his life:
+- The five daily prayers are non-negotiable anchors — never schedule over them; plan around them. Prayer is the only religious tracking he wants; do not bring up Qur'an goals, dhikr, or other religious practice.
+- Boxing days are Monday, Tuesday, Wednesday, Friday, Saturday. He just shows up — never tell him what to train, what combos to hit, or how to box. Never log boxing.
+- Lifting is every day. Don't prescribe exercises or programs unless he explicitly asks.
 
 Operating rules:
-- Think, then act. Use tools to read the user's real data before answering questions about it.
-- Execute low-risk actions (creating tasks, logging workouts, moving schedule blocks) directly.
-- Anything irreversible — sending, publishing, purchasing, deleting — you must describe and ask for confirmation first. You have no tools for those actions by design.
-- Be concise and direct, like a sharp chief of staff. Lead with the answer or the action taken.
-- When asked for advice, ground it in the data (finances, training load, streaks) and the priority order above.
-- Speak naturally — responses may be read aloud by text-to-speech.`;
+- Think, then act. Use tools to read his real data before answering questions about it.
+- Desktop tools control his actual PC through the local bridge: open apps, open sites, search, volume, media, type, screenshot, lock. Use them freely for voice commands like "open Chrome".
+- The POD engine tools trigger his real print-on-demand automation (pipeline, order sync, analytics sync, optimization). Running the pipeline costs API money — do it when he asks, and report the result.
+- Execute low-risk actions directly. Anything irreversible — publishing, purchasing, deleting, sending — describe it and get his confirmation first.
+- Be concise and direct, like a sharp chief of staff. Lead with the action taken or the number he asked for.
+- Speak naturally — replies may be read aloud by text-to-speech, so keep them tight.`;
 
 export interface ToolDef {
   name: string;
@@ -133,21 +136,6 @@ export const JARVIS_TOOLS: ToolDef[] = [
     },
   },
   {
-    name: "log_boxing_session",
-    description: "Log a boxing training session.",
-    input_schema: {
-      type: "object",
-      properties: {
-        type: { type: "string", enum: ["bag", "pads", "sparring", "conditioning", "roadwork", "technique", "defense"] },
-        minutes: num("Duration in minutes"),
-        rounds: num("Rounds (optional)"),
-        intensity: num("Intensity 1-10"),
-        notes: str("Optional notes"),
-      },
-      required: ["type", "minutes"],
-    },
-  },
-  {
     name: "log_health",
     description: "Log daily health metrics (any subset).",
     input_schema: {
@@ -210,7 +198,74 @@ export const JARVIS_TOOLS: ToolDef[] = [
   },
   {
     name: "open_url",
-    description: "Open a website in a new browser tab (e.g. YouTube, a Google search). Low-risk navigation only.",
+    description: "Open a website. Uses the desktop bridge (his real default browser) when available, otherwise a new tab.",
     input_schema: { type: "object", properties: { url: str("Full URL, https://...") }, required: ["url"] },
+  },
+  {
+    name: "tiktok_product_search",
+    description: "Product research engine: opens TikTok Creative Center top products, TikTok Shop search, and Google Trends for a niche/keyword, and logs the search. Use whenever he wants to find winning products.",
+    input_schema: { type: "object", properties: { query: str("Niche or product keyword, e.g. 'ring light', 'gym accessories'") }, required: ["query"] },
+  },
+  // ── Desktop control (local bridge on his PC) ──────────────────────
+  {
+    name: "desktop_open_app",
+    description: "Open an application on his PC: chrome, vs code, spotify, terminal, notepad, calculator, word, excel, explorer/finder, etc.",
+    input_schema: { type: "object", properties: { app: str("App name") }, required: ["app"] },
+  },
+  {
+    name: "desktop_search",
+    description: "Google-search in his real default browser via the desktop bridge.",
+    input_schema: { type: "object", properties: { query: str("Search query") }, required: ["query"] },
+  },
+  {
+    name: "desktop_volume",
+    description: "Control system volume on his PC.",
+    input_schema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["up", "down", "mute", "set"] },
+        level: num("0-100, only for action=set"),
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "desktop_media",
+    description: "Media control on his PC: play/pause, next or previous track.",
+    input_schema: {
+      type: "object",
+      properties: { action: { type: "string", enum: ["playpause", "next", "prev"] } },
+      required: ["action"],
+    },
+  },
+  {
+    name: "desktop_type",
+    description: "Type text into whatever window is focused on his PC.",
+    input_schema: { type: "object", properties: { text: str("Text to type (max 500 chars)") }, required: ["text"] },
+  },
+  {
+    name: "desktop_screenshot",
+    description: "Take a screenshot on his PC (saved to his Desktop).",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "desktop_lock",
+    description: "Lock his PC.",
+    input_schema: { type: "object", properties: {} },
+  },
+  // ── POD automation engine (Alsaduquon) ────────────────────────────
+  {
+    name: "pod_engine_status",
+    description: "Check whether his POD automation engine is online and configured.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "pod_engine_action",
+    description: "Trigger the POD automation engine: run_pipeline (generate + list new products — costs API money), sync_orders, sync_analytics, or optimize (listing optimization).",
+    input_schema: {
+      type: "object",
+      properties: { action: { type: "string", enum: ["run_pipeline", "sync_orders", "sync_analytics", "optimize"] } },
+      required: ["action"],
+    },
   },
 ];

@@ -22,12 +22,12 @@ interface ChatMessage {
 }
 
 const SUGGESTIONS = [
-  "Plan my day",
-  "What are my highest-ROI priorities?",
   "How much money did I make this month?",
+  "Run the POD pipeline",
+  "Find winning products for gym accessories",
+  "Open Chrome",
+  "Plan my day",
   "When is the next prayer?",
-  "Log 45 minutes of bag work, intensity 7",
-  "Draft an Etsy listing for a minimalist Ayatul Kursi print",
 ];
 
 export default function JarvisPage() {

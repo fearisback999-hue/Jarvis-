@@ -42,12 +42,14 @@ export function generateDayPlan(
   // Isha can wrap past midnight (high latitudes / timezone edge cases) —
   // clamp bedtime into the 21:00–23:59 window so the day keeps free slots.
   const sleepStart = Math.min(23 * 60, Math.max(21 * 60, times.isha + 150));
-  push(times.fajr + PRAYER_DURATION, times.fajr + PRAYER_DURATION + 15, "study", "Qur'an reading");
-  push(times.fajr + PRAYER_DURATION + 20, times.fajr + PRAYER_DURATION + 60, "roadwork", "Roadwork / conditioning");
   if (isWeekday) push(8 * 60, 15 * 60, "school", "School");
-  // Gym after Asr
-  push(times.asr + PRAYER_DURATION + 10, times.asr + PRAYER_DURATION + 85, "gym", "Gym — strength");
-  push(times.maghrib + PRAYER_DURATION, times.maghrib + PRAYER_DURATION + 40, "meal", "Dinner + family");
+  // Lifting every day, after Asr
+  const liftStart = times.asr + PRAYER_DURATION + 10;
+  push(liftStart, liftStart + 75, "gym", "Lifting");
+  // Boxing days: Mon, Tue, Wed, Fri, Sat — right after lifting
+  const isBoxingDay = [1, 2, 3, 5, 6].includes(date.getDay());
+  if (isBoxingDay) push(liftStart + 90, liftStart + 180, "boxing", "Boxing");
+  push(times.maghrib + PRAYER_DURATION, times.maghrib + PRAYER_DURATION + 40, "meal", "Dinner");
   push(sleepStart, 24 * 60 - 1, "sleep", "Sleep");
 
   // 3. Free slots = day minus everything above

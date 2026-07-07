@@ -125,10 +125,10 @@ export default function CommandCenter() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
-          { href: "/business/tiktok", label: "TikTok Shop", note: `${s.products.filter((p) => p.platform === "tiktok").length} products tracked` },
+          { href: "/business/pod", label: "POD Automation", note: "run the pipeline by voice" },
+          { href: "/business/tiktok", label: "TikTok Shop", note: `${s.products.filter((p) => p.platform === "tiktok").length} products · search engine` },
           { href: "/business/etsy", label: "Etsy queue", note: `${s.listings.filter((l) => l.state !== "published").length} listings pending` },
-          { href: "/boxing", label: "Boxing", note: `${s.boxingSessions.length} sessions logged` },
-          { href: "/law", label: "Law roadmap", note: `${s.lawMilestones.filter((m) => m.status === "done").length}/${s.lawMilestones.length} milestones` },
+          { href: "/boxing", label: "Boxing", note: "Mon · Tue · Wed · Fri · Sat" },
         ].map((x) => (
           <Link key={x.href} href={x.href}>
             <Card className="transition-colors hover:border-white/[0.16]">

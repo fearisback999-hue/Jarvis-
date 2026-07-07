@@ -37,19 +37,34 @@ Voice mode ("Hey Jarvis" wake phrase, speech-to-text, text-to-speech) works in C
 
 | Module | Route | What it does |
 |---|---|---|
-| Command Center | `/` | Morning briefing, highest-ROI tasks, prayer countdown, today at a glance |
-| JARVIS | `/jarvis` | Agentic chat + voice mode; executes tools (tasks, finance, schedule, workouts) |
-| Money OS | `/money` | Revenue, profit, expenses, net worth, cash flow, goals, forecasts |
-| TikTok Shop | `/business/tiktok` | Winning products, content calendar, scripts, growth metrics |
+| Command Center | `/` | Money snapshot, highest-ROI tasks, prayer countdown, today at a glance |
+| JARVIS | `/jarvis` | Agentic chat + voice mode; controls the PC, the POD engine, money, schedule |
+| Money OS | `/money` | Revenue, profit, expenses, net worth, cash flow, goals |
+| POD Automation | `/business/pod` | Triggers your NEO POD engine (Alsaduquon): pipeline, order sync, analytics, optimize |
+| TikTok Shop | `/business/tiktok` | Product Search Engine + product pipeline + content calendar |
 | Etsy | `/business/etsy` | Listings pipeline, SEO/keywords, publishing queue, profit |
-| Boxing | `/boxing` | Sessions, sparring, skill ratings, weight, fight prep, AI coaching plan |
-| Gym | `/gym` | Workouts, sets/reps/weight, PRs, progressive overload, weekly volume |
-| Health | `/health` | Calories, protein, water, sleep, weight, mood, daily readiness score |
+| Boxing | `/boxing` | Training days only: Mon · Tue · Wed · Fri · Sat + fight countdown |
+| Gym | `/gym` | Lifting every day — sets/reps/weight, PRs, weekly volume |
+| Health | `/health` | Calories, protein, water, sleep, weight, daily readiness score |
 | Law | `/law` | Milestone roadmap: high school → LSAT → law school → bar |
-| Islam | `/islam` | Real prayer-time calculation, countdowns, Qur'an/dhikr tracking, streaks |
-| Schedule | `/schedule` | AI day plan generated around prayer times, ROI-ranked blocks |
-| Tasks | `/tasks` | Priorities, deadlines, subtasks, recurrence, ROI scoring |
-| Settings | `/settings` | Location, calculation method, profile, data export |
+| Prayer | `/prayer` | Real prayer-time calculation, countdown, logging, streak |
+| Schedule | `/schedule` | Day plan around prayer anchors; lifting daily, boxing on boxing days |
+| Tasks | `/tasks` | Priorities, deadlines, subtasks, ROI scoring |
+| Settings | `/settings` | Desktop bridge pairing, location, prayer method, data export |
+
+## Desktop control ("Hey Jarvis, open Chrome")
+
+Run the bridge on your PC — it's a single zero-dependency script:
+
+```bash
+node desktop-bridge/bridge.mjs
+```
+
+It prints a pairing token; paste it into **Settings → Desktop bridge**. JARVIS can then open apps, search Google in your real browser, control volume and media, type, take screenshots, and lock the machine — by text or voice. The bridge listens on `127.0.0.1` only.
+
+## POD engine
+
+The [`Alsaduquon`](https://github.com/fearisback999-hue/Alsaduquon) POD automation engine plugs in via `.env.local` (`POD_ENGINE_URL` + `POD_CRON_SECRET`). JARVIS can run the pipeline, sync orders, sync analytics, and optimize listings — from the POD page or by voice.
 
 ## Documentation
 

@@ -1,14 +1,25 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useJarvis } from "@/lib/store";
 import { CALC_METHODS, type CalcMethodId, type AsrMethod } from "@/lib/prayer-times";
+import { bridgeOnline, getBridgeToken, setBridgeToken } from "@/lib/desktop-bridge";
 import { useMounted } from "@/hooks/use-mounted";
-import { Card, SectionHeader, Button, Input, Select } from "@/components/ui";
-import { Download, MapPin } from "lucide-react";
+import { Card, SectionHeader, Button, Input, Select, Badge } from "@/components/ui";
+import { Download, MapPin, MonitorSmartphone, RefreshCcw } from "lucide-react";
 
 export default function SettingsPage() {
   const mounted = useMounted();
   const s = useJarvis();
+  const [online, setOnline] = useState<boolean | null>(null);
+  const [token, setToken] = useState("");
+
+  useEffect(() => {
+    if (!mounted) return;
+    setToken(getBridgeToken());
+    void bridgeOnline().then(setOnline);
+  }, [mounted]);
+
   if (!mounted) return null;
 
   const useMyLocation = () => {
@@ -70,6 +81,34 @@ export default function SettingsPage() {
               <option value="hanafi">Hanafi</option>
             </Select>
           </label>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-[14px] font-semibold">
+            <MonitorSmartphone size={15} className="text-emerald-400" /> Desktop bridge
+          </h2>
+          <span className="flex items-center gap-2">
+            <Badge className={online ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-800 text-zinc-500"}>
+              {online == null ? "checking…" : online ? "online" : "offline"}
+            </Badge>
+            <button onClick={() => { setOnline(null); void bridgeOnline().then(setOnline); }} className="text-zinc-600 hover:text-zinc-300" aria-label="Recheck bridge">
+              <RefreshCcw size={13} />
+            </button>
+          </span>
+        </div>
+        <p className="mb-3 text-[13px] text-zinc-500">
+          The bridge lets JARVIS control this computer — open apps, search, volume, media, screenshots, lock —
+          including by voice (&quot;Hey Jarvis, open Chrome&quot;). Run it on your PC:
+        </p>
+        <pre className="mb-3 overflow-x-auto rounded-lg bg-[#0d0d0f] px-3 py-2 font-mono text-[12px] text-emerald-300">node desktop-bridge/bridge.mjs</pre>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex min-w-64 flex-1 flex-col gap-1 text-[12px] text-zinc-500">
+            Pairing token (printed by the bridge on startup)
+            <Input value={token} onChange={(e) => setToken(e.target.value)} placeholder="paste token…" />
+          </label>
+          <Button onClick={() => { setBridgeToken(token); void bridgeOnline().then(setOnline); }}>Save</Button>
         </div>
       </Card>
 

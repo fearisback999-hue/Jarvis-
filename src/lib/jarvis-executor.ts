@@ -4,10 +4,11 @@
 // the server never touches personal data.
 
 import { useJarvis, roiScore, financeSummary, prayerStreak, readinessScore, PILLARS } from "./store";
-import type { Pillar, Task, BoxingType, WorkoutSet } from "./store";
+import type { Pillar, Task, WorkoutSet } from "./store";
 import { computePrayerTimes, nextPrayer, PRAYER_NAMES, type PrayerName } from "./prayer-times";
 import { generateDayPlan } from "./scheduler";
 import { todayKey, fmtHM, hmToMinutes, fmtDuration, lastNDays } from "./utils";
+import { bridgeCmd, bridgeOnline } from "./desktop-bridge";
 
 type Json = Record<string, unknown>;
 
@@ -117,17 +118,6 @@ export async function executeJarvisTool(name: string, input: Json): Promise<Json
       s.addWorkout({ date: today, name: String(input.name), sets });
       return { ok: true, logged: input.name, sets: sets.length };
     }
-    case "log_boxing_session": {
-      s.addBoxingSession({
-        date: today,
-        type: input.type as BoxingType,
-        minutes: Number(input.minutes),
-        rounds: input.rounds ? Number(input.rounds) : undefined,
-        intensity: Number(input.intensity ?? 6),
-        notes: input.notes ? String(input.notes) : undefined,
-      });
-      return { ok: true, logged: `${input.minutes}min ${input.type}` };
-    }
     case "log_health": {
       const patch: Json = {};
       for (const k of ["calories", "protein", "waterMl", "sleepHours", "weight", "mood", "energy"])
@@ -179,8 +169,50 @@ export async function executeJarvisTool(name: string, input: Json): Promise<Json
     case "open_url": {
       const url = String(input.url);
       if (!/^https?:\/\//.test(url)) return { ok: false, error: "Only http(s) URLs" };
+      if (await bridgeOnline()) return bridgeCmd("open_url", { url });
       window.open(url, "_blank", "noopener");
       return { ok: true, opened: url };
+    }
+    case "tiktok_product_search": {
+      const q = String(input.query).trim();
+      const urls = [
+        `https://ads.tiktok.com/business/creativecenter/inspiration/topads/pc/en?keyword=${encodeURIComponent(q)}`,
+        `https://www.tiktok.com/search?q=${encodeURIComponent(q + " tiktok shop")}`,
+        `https://trends.google.com/trends/explore?q=${encodeURIComponent(q)}`,
+      ];
+      const viaBridge = await bridgeOnline();
+      for (const url of urls) {
+        if (viaBridge) await bridgeCmd("open_url", { url });
+        else window.open(url, "_blank", "noopener");
+      }
+      s.addProduct({ platform: "tiktok", name: `[research] ${q}`, status: "research", notes: "Product search run" });
+      return { ok: true, query: q, opened: urls, note: "Creative Center top ads, TikTok Shop search, and Google Trends opened; research entry added to the pipeline." };
+    }
+    case "desktop_open_app":
+      return bridgeCmd("open_app", { app: String(input.app) });
+    case "desktop_search":
+      return bridgeCmd("search", { query: String(input.query) });
+    case "desktop_volume":
+      return bridgeCmd("volume", { action: String(input.action), level: input.level == null ? undefined : Number(input.level) });
+    case "desktop_media":
+      return bridgeCmd("media", { action: String(input.action) });
+    case "desktop_type":
+      return bridgeCmd("type", { text: String(input.text) });
+    case "desktop_screenshot":
+      return bridgeCmd("screenshot", {});
+    case "desktop_lock":
+      return bridgeCmd("lock", {});
+    case "pod_engine_status": {
+      const res = await fetch("/api/pod");
+      return (await res.json()) as Json;
+    }
+    case "pod_engine_action": {
+      const res = await fetch("/api/pod", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: String(input.action) }),
+      });
+      return (await res.json()) as Json;
     }
     default:
       return { ok: false, error: `Unknown tool: ${name}` };
@@ -192,6 +224,75 @@ export async function executeJarvisTool(name: string, input: Json): Promise<Json
 export async function localPlanner(text: string): Promise<string> {
   const q = text.toLowerCase();
   const s = useJarvis.getState();
+
+  // ── Desktop control ─────────────────────────────────────────────
+  const appMatch = q.match(/open (up )?(chrome|google chrome|vs ?code|visual studio code|spotify|notepad|calculator|terminal|cmd|word|excel|explorer|finder|edge|firefox|safari|task manager|settings)/);
+  if (appMatch) {
+    const app = appMatch[2].replace("google chrome", "chrome").replace(/^vs ?code$|visual studio code/, "vs code");
+    const r = await executeJarvisTool("desktop_open_app", { app });
+    return r.ok ? `Opening ${app}.` : String(r.error ?? r.err ?? "Bridge offline.");
+  }
+  const siteMatch = q.match(/open (up )?(youtube|gmail|tiktok|etsy|printify|instagram|twitter|x\.com|amazon|github)/);
+  if (siteMatch) {
+    const site = siteMatch[2].replace("x.com", "x");
+    const r = await executeJarvisTool("open_url", { url: `https://www.${site}.com` });
+    return r.ok ? `Opening ${site}.` : String(r.error ?? "Couldn't open it.");
+  }
+  const searchMatch = q.match(/(?:search (?:google |the web )?for|google) (.+)/);
+  if (searchMatch) {
+    const r = (await bridgeOnline())
+      ? await executeJarvisTool("desktop_search", { query: searchMatch[1] })
+      : await executeJarvisTool("open_url", { url: `https://www.google.com/search?q=${encodeURIComponent(searchMatch[1])}` });
+    return r.ok ? `Searching for ${searchMatch[1]}.` : String(r.error ?? r.err ?? "Couldn't search.");
+  }
+  if (/volume (up|down)|turn (it |the volume )?(up|down)|^mute|unmute/.test(q)) {
+    const action = q.includes("mute") ? "mute" : /volume up|turn.*up/.test(q) ? "up" : "down";
+    const r = await executeJarvisTool("desktop_volume", { action });
+    return r.ok ? `Volume ${action}.` : String(r.error ?? r.err ?? "Bridge offline.");
+  }
+  if (/(pause|resume|play) (the )?(music|song)|^(play|pause)$|next (song|track)|skip (this )?(song|track)|previous (song|track)/.test(q)) {
+    const action = /next|skip/.test(q) ? "next" : /previous/.test(q) ? "prev" : "playpause";
+    const r = await executeJarvisTool("desktop_media", { action });
+    return r.ok ? "Done." : String(r.error ?? r.err ?? "Bridge offline.");
+  }
+  if (/take a screenshot|screenshot/.test(q)) {
+    const r = await executeJarvisTool("desktop_screenshot", {});
+    return r.ok ? `Screenshot saved${r.file ? ` to ${String(r.file)}` : ""}.` : String(r.error ?? r.err ?? "Bridge offline.");
+  }
+  if (/lock (my |the )?(pc|computer|screen)/.test(q)) {
+    const r = await executeJarvisTool("desktop_lock", {});
+    return r.ok ? "Locking your PC." : String(r.error ?? r.err ?? "Bridge offline.");
+  }
+
+  // ── POD engine ──────────────────────────────────────────────────
+  if (/pod|print on demand/.test(q)) {
+    if (/run|start|trigger|launch/.test(q) && /pipeline|engine|automation/.test(q)) {
+      const r = await executeJarvisTool("pod_engine_action", { action: "run_pipeline" });
+      return r.ok ? "POD pipeline triggered — it's generating and listing products now." : String(r.error ?? "POD engine unreachable.");
+    }
+    if (/sync.*order/.test(q)) {
+      const r = await executeJarvisTool("pod_engine_action", { action: "sync_orders" });
+      return r.ok ? "Order sync triggered." : String(r.error ?? "POD engine unreachable.");
+    }
+    if (/optimi[sz]e/.test(q)) {
+      const r = await executeJarvisTool("pod_engine_action", { action: "optimize" });
+      return r.ok ? "Listing optimization triggered." : String(r.error ?? "POD engine unreachable.");
+    }
+    const st = (await executeJarvisTool("pod_engine_status", {})) as { configured?: boolean; online?: boolean };
+    return !st.configured
+      ? "POD engine isn't configured yet — set POD_ENGINE_URL and POD_CRON_SECRET in .env.local."
+      : st.online
+        ? "POD engine is online. Say 'run the pod pipeline', 'sync pod orders', or 'optimize pod listings'."
+        : "POD engine is configured but not responding right now.";
+  }
+
+  // ── Product research ────────────────────────────────────────────
+  const prodMatch = q.match(/(?:find|research|search)(?: for)? (?:winning |trending )?products?(?: for| in| about)? (.+)|product search (?:for )?(.+)/);
+  if (prodMatch) {
+    const query = (prodMatch[1] ?? prodMatch[2]).trim();
+    await executeJarvisTool("tiktok_product_search", { query });
+    return `Product search running for "${query}" — Creative Center, TikTok Shop and Google Trends are open.`;
+  }
 
   if (/(plan|generate|make).*(day|schedule)|schedule.*(day|today)/.test(q) || q.includes("plan my day")) {
     await executeJarvisTool("generate_schedule", {});

@@ -6,7 +6,8 @@ import type { Product } from "@/lib/store";
 import { fmtMoney } from "@/lib/utils";
 import { useMounted } from "@/hooks/use-mounted";
 import { Card, StatCard, SectionHeader, Button, Input, Select, Badge, EmptyState } from "@/components/ui";
-import { Trash2 } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
+import { executeJarvisTool } from "@/lib/jarvis-executor";
 
 const STATUS_BADGE: Record<Product["status"], string> = {
   research: "bg-zinc-800 text-zinc-300",
@@ -21,8 +22,17 @@ export default function TikTokPage() {
   const s = useJarvis();
   const [name, setName] = useState("");
   const [hook, setHook] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  const [searching, setSearching] = useState(false);
 
   if (!mounted) return null;
+
+  const runSearch = async () => {
+    if (!searchQ.trim()) return;
+    setSearching(true);
+    try { await executeJarvisTool("tiktok_product_search", { query: searchQ.trim() }); }
+    finally { setSearching(false); setSearchQ(""); }
+  };
 
   const products = s.products.filter((p) => p.platform === "tiktok");
   const fin = financeSummary(s.transactions);
@@ -31,6 +41,24 @@ export default function TikTokPage() {
   return (
     <div className="fade-up flex flex-col gap-4">
       <SectionHeader title="TikTok Shop" subtitle="Winning products, content engine, growth." />
+
+      <Card className="bg-gradient-to-r from-sky-500/[0.06] to-transparent">
+        <h2 className="mb-1 flex items-center gap-2 text-[14px] font-semibold"><Search size={15} className="text-sky-400" /> Product Search Engine</h2>
+        <p className="mb-3 text-[12px] text-zinc-500">
+          One search opens TikTok Creative Center top ads, TikTok Shop results, and Google Trends for the niche — and files it in the pipeline below. Also works by voice: &quot;Hey Jarvis, find winning products for gym accessories.&quot;
+        </p>
+        <div className="flex gap-2">
+          <Input
+            placeholder="Niche or product keyword…"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void runSearch()}
+          />
+          <Button onClick={() => void runSearch()} disabled={searching}>
+            <Search size={13} /> {searching ? "Opening…" : "Search"}
+          </Button>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="TikTok revenue (mo)" value={fmtMoney(fin.bySource.tiktok)} accent="#10b981" />

@@ -4,26 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Sparkles, Wallet, Receipt, Video, Store, Factory, Megaphone, Swords,
-  Dumbbell, HeartPulse, Scale, Moon, CalendarClock, CheckSquare, Settings,
+  LayoutDashboard, Sparkles, Scale, CalendarClock, CheckSquare, Wallet,
+  Moon, Swords, Dumbbell, Settings,
 } from "lucide-react";
 
 const NAV = [
   { href: "/", label: "Command Center", icon: LayoutDashboard },
   { href: "/jarvis", label: "JARVIS", icon: Sparkles },
-  { href: "/money", label: "Money", icon: Wallet },
-  { href: "/money/bills", label: "Bills & Autopay", icon: Receipt },
-  { href: "/business/pod", label: "POD Automation", icon: Factory },
-  { href: "/business/tiktok", label: "TikTok Shop", icon: Video },
-  { href: "/business/etsy", label: "Etsy", icon: Store },
-  { href: "/business/ads", label: "Advertising", icon: Megaphone },
-  { href: "/prayer", label: "Prayer", icon: Moon },
+  { href: "/law", label: "Career", icon: Scale },
   { href: "/schedule", label: "Schedule", icon: CalendarClock },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
-  { href: "/gym", label: "Gym", icon: Dumbbell },
+  { href: "/money", label: "Money", icon: Wallet },
+  { href: "/prayer", label: "Prayer", icon: Moon },
   { href: "/boxing", label: "Boxing", icon: Swords },
-  { href: "/health", label: "Health", icon: HeartPulse },
-  { href: "/law", label: "Career", icon: Scale },
+  { href: "/gym", label: "Gym", icon: Dumbbell },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

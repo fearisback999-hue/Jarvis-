@@ -5,7 +5,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { JARVIS_SYSTEM_PROMPT, JARVIS_TOOLS } from "@/lib/jarvis-tools";
-import { getMcpToolDefs } from "@/lib/mcp";
 import { localLlmConfigured, runLocalLlm } from "@/lib/local-llm";
 
 export const maxDuration = 120;
@@ -19,12 +18,11 @@ export async function POST(req: NextRequest) {
   };
 
   const system = context ? `${JARVIS_SYSTEM_PROMPT}\n\nLive context snapshot:\n${context}` : JARVIS_SYSTEM_PROMPT;
-  const allTools = [...JARVIS_TOOLS, ...(await getMcpToolDefs().catch(() => []))];
 
   // 1. Local LLM (Ollama / llama) takes priority — your brain, your machine
   if (localLlmConfigured()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return NextResponse.json(await runLocalLlm(system, messages as any, allTools));
+    return NextResponse.json(await runLocalLlm(system, messages as any, JARVIS_TOOLS));
   }
 
   // 2. Anthropic API
@@ -43,7 +41,7 @@ export async function POST(req: NextRequest) {
         { type: "text", text: JARVIS_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
         ...(context ? [{ type: "text" as const, text: `Live context snapshot:\n${context}` }] : []),
       ],
-      tools: allTools.map((t) => ({
+      tools: JARVIS_TOOLS.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.input_schema as Anthropic.Tool.InputSchema,

@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useJarvis, financeSummary } from "@/lib/store";
 import { todayKey, fmtMoney, lastNDays } from "@/lib/utils";
 import { useMounted } from "@/hooks/use-mounted";
 import { Card, StatCard, SectionHeader, Button, Input, Select, ProgressBar, EmptyState } from "@/components/ui";
-import { TrendArea, Donut } from "@/components/charts";
-import { ArrowRight, Trash2 } from "lucide-react";
+import { TrendArea } from "@/components/charts";
+import { Trash2 } from "lucide-react";
 
 export default function MoneyPage() {
   const mounted = useMounted();
@@ -15,16 +14,12 @@ export default function MoneyPage() {
   const [amount, setAmount] = useState("");
   const [direction, setDirection] = useState<"income" | "expense">("income");
   const [category, setCategory] = useState("");
-  const [source, setSource] = useState<"tiktok" | "etsy" | "other">("tiktok");
 
   if (!mounted) return null;
 
   const fin = financeSummary(s.transactions);
   const netWorth = s.accounts.reduce((a, acc) => a + acc.balance, 0);
   const goal = s.goals.find((g) => g.horizon === "monthly");
-  const month = todayKey().slice(0, 7);
-  const billsNeeded = s.bills.reduce((a, b) => a + b.amount, 0);
-  const billsRemaining = s.bills.filter((b) => b.lastPaidMonth !== month).reduce((a, b) => a + b.amount, 0);
 
   // 30-day cumulative cash flow
   const days = lastNDays(30);
@@ -37,22 +32,16 @@ export default function MoneyPage() {
   let running = 0;
   const cumulative = flow.map((f) => ({ day: f.day, cashflow: (running += f.net) }));
 
-  const donutData = [
-    { name: "TikTok", value: fin.bySource.tiktok },
-    { name: "Etsy", value: fin.bySource.etsy },
-    { name: "Other", value: fin.bySource.other },
-  ];
-
   const addTx = () => {
     const amt = parseFloat(amount);
     if (!amt || !category.trim()) return;
-    s.addTransaction({ amount: amt, direction, category: category.trim(), source, date: todayKey() });
+    s.addTransaction({ amount: amt, direction, category: category.trim(), date: todayKey() });
     setAmount(""); setCategory("");
   };
 
   return (
     <div className="fade-up flex flex-col gap-4">
-      <SectionHeader title="Money OS" subtitle="Revenue, profit, cash flow, and goals — the primary mission." />
+      <SectionHeader title="Money" subtitle="What you're spending, what you're making." />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Revenue (month)" value={fmtMoney(fin.revenue)} accent="#10b981" />
@@ -61,30 +50,10 @@ export default function MoneyPage() {
         <StatCard label="Net worth" value={fmtMoney(netWorth)} sub={`${s.accounts.length} accounts`} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <h2 className="mb-2 text-[14px] font-semibold">Cumulative cash flow — 30 days</h2>
-          <TrendArea data={cumulative} dataKey="cashflow" xKey="day" valueFormatter={(v) => fmtMoney(v)} />
-        </Card>
-        <Card className="lg:col-span-2">
-          <h2 className="mb-2 text-[14px] font-semibold">Income by source (month)</h2>
-          {fin.revenue === 0 ? <EmptyState>No income recorded this month yet.</EmptyState> : <Donut data={donutData} />}
-        </Card>
-      </div>
-
-      <Link href="/money/bills">
-        <Card className="flex items-center justify-between transition-colors hover:border-white/[0.16]">
-          <div>
-            <div className="text-[13px] font-semibold">Business Bills & Autopay</div>
-            <div className="mt-0.5 text-[12px] text-zinc-500">
-              {billsNeeded > 0
-                ? `${fmtMoney(billsNeeded, 2)} needed this month · ${fmtMoney(billsRemaining, 2)} still due`
-                : "Register recurring expenses, link a bank, pay under hard spending rules"}
-            </div>
-          </div>
-          <ArrowRight size={15} className="text-zinc-600" />
-        </Card>
-      </Link>
+      <Card>
+        <h2 className="mb-2 text-[14px] font-semibold">Cumulative cash flow — 30 days</h2>
+        <TrendArea data={cumulative} dataKey="cashflow" xKey="day" valueFormatter={(v) => fmtMoney(v)} />
+      </Card>
 
       {goal && (
         <Card>
@@ -104,12 +73,7 @@ export default function MoneyPage() {
             <option value="income">Income</option>
             <option value="expense">Expense</option>
           </Select>
-          <Input className="w-52 flex-1" placeholder="Category (e.g. TikTok Shop sale)" value={category} onChange={(e) => setCategory(e.target.value)} />
-          <Select value={source} onChange={(e) => setSource(e.target.value as "tiktok")}>
-            <option value="tiktok">TikTok</option>
-            <option value="etsy">Etsy</option>
-            <option value="other">Other</option>
-          </Select>
+          <Input className="w-52 flex-1" placeholder="Category (e.g. sale, groceries)" value={category} onChange={(e) => setCategory(e.target.value)} />
           <Button onClick={addTx}>Add</Button>
         </div>
       </Card>
@@ -125,7 +89,6 @@ export default function MoneyPage() {
                 <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-wide text-zinc-500">
                   <th className="pb-2 pr-4 font-medium">Date</th>
                   <th className="pb-2 pr-4 font-medium">Category</th>
-                  <th className="pb-2 pr-4 font-medium">Source</th>
                   <th className="pb-2 pr-4 text-right font-medium">Amount</th>
                   <th className="pb-2" />
                 </tr>
@@ -135,7 +98,6 @@ export default function MoneyPage() {
                   <tr key={t.id} className="border-b border-white/[0.04]">
                     <td className="tabular py-2 pr-4 text-zinc-500">{t.date}</td>
                     <td className="py-2 pr-4">{t.category}</td>
-                    <td className="py-2 pr-4 capitalize text-zinc-500">{t.source}</td>
                     <td className={`tabular py-2 pr-4 text-right font-medium ${t.direction === "income" ? "text-emerald-400" : "text-zinc-300"}`}>
                       {t.direction === "income" ? "+" : "−"}{fmtMoney(t.amount)}
                     </td>

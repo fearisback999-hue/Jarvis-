@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useJarvis, roiScore, financeSummary, prayerStreak, readinessScore, PILLARS } from "@/lib/store";
+import { useJarvis, roiScore, financeSummary, prayerStreak, PILLARS } from "@/lib/store";
 import { computePrayerTimes, nextPrayer } from "@/lib/prayer-times";
 import { generateDayPlan, BLOCK_STYLES } from "@/lib/scheduler";
 import { todayKey, fmtHM, fmtMoney, fmtDuration } from "@/lib/utils";
 import { useMounted, useNow } from "@/hooks/use-mounted";
-import { Card, StatCard, Badge, Button, SectionHeader } from "@/components/ui";
+import { Card, StatCard, Badge, Button } from "@/components/ui";
 import { Sparkles, CalendarClock, ArrowRight } from "lucide-react";
 
 export default function CommandCenter() {
@@ -26,7 +26,8 @@ export default function CommandCenter() {
   const fin = financeSummary(s.transactions);
   const goal = s.goals.find((g) => g.horizon === "monthly");
   const streak = prayerStreak(s.prayerLogs);
-  const readiness = readinessScore(s.health[todayKey()]);
+  const classesDone = s.career.classes.filter((c) => c.status === "done").length;
+  const classesTotal = s.career.classes.length;
 
   const topTasks = s.tasks
     .filter((t) => t.status !== "done" && !t.parentId)
@@ -58,7 +59,7 @@ export default function CommandCenter() {
           sub={goal ? `${Math.round((fin.revenue / goal.target) * 100)}% of ${fmtMoney(goal.target)} goal` : undefined} />
         <StatCard label="Profit" value={fmtMoney(fin.profit)} />
         <StatCard label="Prayer streak" value={`${streak}d`} accent="#2dd4bf" sub="all five, on time" />
-        <StatCard label="Readiness" value={readiness ?? "—"} sub={readiness == null ? "log sleep & energy" : readiness >= 75 ? "train hard today" : "prioritize recovery"} />
+        <StatCard label="Transfer checklist" value={`${classesDone}/${classesTotal}`} accent="#f59e0b" sub={s.career.targetUC} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -125,10 +126,10 @@ export default function CommandCenter() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
-          { href: "/business/pod", label: "POD Automation", note: "run the pipeline by voice" },
-          { href: "/business/tiktok", label: "TikTok Shop", note: `${s.products.filter((p) => p.platform === "tiktok").length} products · search engine` },
-          { href: "/business/etsy", label: "Etsy queue", note: `${s.listings.filter((l) => l.state !== "published").length} listings pending` },
+          { href: "/law", label: "Career", note: `${classesDone}/${classesTotal} transfer classes done` },
           { href: "/boxing", label: "Boxing", note: "Mon · Tue · Wed · Fri · Sat" },
+          { href: "/gym", label: "Gym", note: "every day, no days off" },
+          { href: "/money", label: "Money", note: "spending & profit" },
         ].map((x) => (
           <Link key={x.href} href={x.href}>
             <Card className="transition-colors hover:border-white/[0.16]">

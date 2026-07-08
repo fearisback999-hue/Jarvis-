@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import { uid, todayKey } from "./utils";
 import type { CalcMethodId, AsrMethod, PrayerName } from "./prayer-times";
 
-// ── Types (mirror prisma/schema.prisma) ─────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────
 
 export type Pillar = "wealth" | "business" | "boxing" | "law" | "fitness" | "islam" | "self";
 
@@ -49,12 +49,12 @@ export interface ScheduleBlock {
   status: "planned" | "done" | "missed";
 }
 
+// Simple money tracking — just enough to see what's coming in vs going out.
 export interface Transaction {
   id: string;
   amount: number;
   direction: "income" | "expense";
   category: string;
-  source: "tiktok" | "etsy" | "other";
   date: string;
   notes?: string;
 }
@@ -62,53 +62,8 @@ export interface Transaction {
 export interface Account { id: string; name: string; kind: "cash" | "bank" | "investment"; balance: number; }
 export interface FinancialGoal { id: string; title: string; target: number; horizon: "monthly" | "quarterly" | "yearly"; }
 
-// Recurring business expenses (bills). Payments only ever go to bills on
-// this list, for exactly the registered amount — the Spending Guard's
-// whitelist.
-export interface Bill {
-  id: string;
-  name: string;
-  amount: number;
-  dueDay: number; // 1-28
-  category: string;
-  autopay: boolean; // JARVIS prepares it when due; you still approve
-  lastPaidMonth?: string; // YYYY-MM — duplicate-payment block
-}
-
-export interface PaymentRecord {
-  id: string;
-  billId: string;
-  name: string;
-  amount: number;
-  date: string; // YYYY-MM-DD
-  month: string; // YYYY-MM
-}
-
-// Hard limits the Spending Guard enforces on every single payment.
-export interface SpendingRules {
-  monthlyCapUSD: number; // total paid per month can never exceed this
-  perPaymentCapUSD: number; // no single payment above this
-  minBalanceBufferUSD: number; // never let the bank balance dip below this
-}
-
-// Advertising budgets — the variable half of the ~$1,500/mo operating cost
-// (bills are the fixed half). Spend is logged against per-channel caps.
-export interface AdChannel { id: string; name: string; monthlyBudget: number; }
-export interface AdSpend { id: string; channelId: string; amount: number; date: string; note?: string; }
-
-// UGC creator / affiliate program pipeline
-export type CreatorStatus = "prospect" | "contacted" | "negotiating" | "active" | "dropped";
-export interface Creator {
-  id: string;
-  handle: string;
-  platform: "tiktok" | "instagram" | "youtube";
-  status: CreatorStatus;
-  commissionPct: number;
-  gmv: number; // sales attributed to this creator ($)
-  notes?: string;
-}
-
-// Career: Cypress College → UC transfer (ASSIST) → law school → patent law
+// Career: Cypress College → UC transfer (ASSIST) → law school → patent law.
+// This is the biggest single focus in the app.
 export type ClassStatus = "planned" | "in_progress" | "done";
 export interface TransferClass {
   id: string;
@@ -127,83 +82,7 @@ export interface Career {
   classes: TransferClass[];
 }
 
-export interface BankLink {
-  linked: boolean;
-  name?: string;
-  mask?: string;
-  balance?: number; // available balance
-  updatedAt?: string;
-  accessToken?: string; // Plaid access token (device-local; useless without server keys)
-}
-
-export interface Product {
-  id: string;
-  platform: "tiktok" | "etsy";
-  name: string;
-  status: "research" | "testing" | "winning" | "killed" | "live";
-  cost?: number;
-  price?: number;
-  notes?: string;
-}
-
-export interface Listing {
-  id: string;
-  title: string;
-  description?: string;
-  tags: string[];
-  price?: number;
-  state: "draft" | "queued" | "published";
-}
-
-export interface ContentItem {
-  id: string;
-  hook: string;
-  script?: string;
-  caption?: string;
-  postDate?: string;
-  posted: boolean;
-  views: number;
-  sales: number;
-}
-
-export type BoxingType = "bag" | "pads" | "sparring" | "conditioning" | "roadwork" | "technique" | "defense";
-export interface BoxingSession {
-  id: string;
-  date: string;
-  type: BoxingType;
-  minutes: number;
-  rounds?: number;
-  intensity: number; // 1-10
-  notes?: string;
-}
-
-export const BOXING_SKILLS = [
-  "jab", "cross", "hooks", "uppercuts", "footwork",
-  "head movement", "defense", "ring IQ", "conditioning",
-] as const;
-export type BoxingSkill = (typeof BOXING_SKILLS)[number];
-
-export interface WorkoutSet { exercise: string; muscleGroup: string; reps: number; weight: number; }
-export interface Workout { id: string; date: string; name: string; sets: WorkoutSet[]; notes?: string; }
-
-export interface HealthLog {
-  calories?: number; protein?: number; waterMl?: number;
-  sleepHours?: number; weight?: number;
-  mood?: number; stress?: number; energy?: number; // 1-10
-}
-
 export type PrayerStatus = "on_time" | "jamaah" | "late" | "missed";
-export interface QuranLog { id: string; date: string; reference: string; pages: number; }
-export interface DhikrLog { id: string; date: string; kind: string; count: number; }
-
-export type LawPhase = "high_school" | "college" | "lsat" | "applications" | "law_school" | "bar";
-export interface LawMilestone {
-  id: string;
-  phase: LawPhase;
-  title: string;
-  targetDate?: string;
-  status: "upcoming" | "active" | "done";
-}
 
 export interface AgentLogEntry { id: string; time: string; agent: string; summary: string; }
 
@@ -226,28 +105,10 @@ export interface JarvisState {
   transactions: Transaction[];
   accounts: Account[];
   goals: FinancialGoal[];
-  bills: Bill[];
-  payments: PaymentRecord[];
-  spendingRules: SpendingRules;
-  bank: BankLink;
-  adChannels: AdChannel[];
-  adSpends: AdSpend[];
-  creators: Creator[];
   career: Career;
-  products: Product[];
-  listings: Listing[];
-  content: ContentItem[];
-  boxingSessions: BoxingSession[];
-  skills: Record<BoxingSkill, number>;
-  fightDate?: string;
+  fightDate?: string; // boxing — fight-prep reminder only, no session logging
   targetWeight?: number;
-  workouts: Workout[];
-  health: Record<string, HealthLog>; // by date
   prayerLogs: Record<string, Partial<Record<PrayerName, PrayerStatus>>>; // by date
-  quranLogs: QuranLog[];
-  dhikrLogs: DhikrLog[];
-  duas: { id: string; text: string }[];
-  lawMilestones: LawMilestone[];
   agentLog: AgentLogEntry[];
 
   setProfile: (p: Partial<Profile>) => void;
@@ -262,81 +123,25 @@ export interface JarvisState {
   addAccount: (a: Omit<Account, "id">) => void;
   addGoal: (g: Omit<FinancialGoal, "id">) => void;
   deleteGoal: (id: string) => void;
-  addBill: (b: Omit<Bill, "id">) => void;
-  updateBill: (id: string, patch: Partial<Bill>) => void;
-  deleteBill: (id: string) => void;
-  recordPayment: (bill: Bill) => void; // ledger write — guard checks happen BEFORE calling this
-  setSpendingRules: (r: Partial<SpendingRules>) => void;
-  setBank: (b: Partial<BankLink>) => void;
-  setAdBudget: (id: string, monthlyBudget: number) => void;
-  addAdSpend: (channelId: string, amount: number, note?: string) => void;
-  addCreator: (c: Omit<Creator, "id">) => void;
-  updateCreator: (id: string, patch: Partial<Creator>) => void;
-  deleteCreator: (id: string) => void;
   setCareer: (c: Partial<Career>) => void;
   updateClass: (id: string, status: ClassStatus) => void;
   addTransferClass: (c: Omit<TransferClass, "id">) => void;
   addLsatScore: (score: number) => void;
-  addProduct: (p: Omit<Product, "id">) => void;
-  updateProduct: (id: string, patch: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
-  addListing: (l: Omit<Listing, "id">) => void;
-  updateListing: (id: string, patch: Partial<Listing>) => void;
-  deleteListing: (id: string) => void;
-  addContent: (c: Omit<ContentItem, "id">) => void;
-  updateContent: (id: string, patch: Partial<ContentItem>) => void;
-  addBoxingSession: (s: Omit<BoxingSession, "id">) => void;
-  setSkill: (skill: BoxingSkill, rating: number) => void;
   setFightPrep: (fightDate?: string, targetWeight?: number) => void;
-  addWorkout: (w: Omit<Workout, "id">) => void;
-  deleteWorkout: (id: string) => void;
-  logHealth: (date: string, patch: Partial<HealthLog>) => void;
   logPrayer: (date: string, prayer: PrayerName, status: PrayerStatus) => void;
-  addQuranLog: (l: Omit<QuranLog, "id">) => void;
-  addDhikr: (date: string, kind: string, count: number) => void;
-  addDua: (text: string) => void;
-  deleteDua: (id: string) => void;
-  updateMilestone: (id: string, patch: Partial<LawMilestone>) => void;
-  addMilestone: (m: Omit<LawMilestone, "id">) => void;
   logAgent: (agent: string, summary: string) => void;
 }
 
 const seedTasks: Task[] = [
-  { id: uid(), title: "Film 3 TikTok product videos", pillar: "business", priority: "high", impact: 9, effortHours: 2, status: "todo", recurrence: "daily", createdAt: new Date().toISOString() },
-  { id: uid(), title: "Draft 5 Etsy listings for the queue", pillar: "business", priority: "high", impact: 8, effortHours: 1.5, status: "todo", createdAt: new Date().toISOString() },
-  { id: uid(), title: "LSAT logic games — 45 min drill", pillar: "law", priority: "high", impact: 8, effortHours: 0.75, recurrence: "daily", status: "todo", createdAt: new Date().toISOString() },
+  { id: uid(), title: "LSAT logic games — 45 min drill", pillar: "law", priority: "high", impact: 9, effortHours: 0.75, recurrence: "daily", status: "todo", createdAt: new Date().toISOString() },
   { id: uid(), title: "Read 20 pages (finance/law)", pillar: "self", priority: "medium", impact: 6, effortHours: 0.5, recurrence: "daily", status: "todo", createdAt: new Date().toISOString() },
+  { id: uid(), title: "Check ASSIST for this term's articulation updates", pillar: "law", priority: "medium", impact: 7, effortHours: 0.5, recurrence: "weekly", status: "todo", createdAt: new Date().toISOString() },
   { id: uid(), title: "Weekly money review", pillar: "wealth", priority: "medium", impact: 8, effortHours: 0.5, recurrence: "weekly", status: "todo", createdAt: new Date().toISOString() },
-  { id: uid(), title: "Research 10 winning TikTok Shop products", pillar: "business", priority: "medium", impact: 7, effortHours: 1, status: "todo", createdAt: new Date().toISOString() },
-];
-
-const seedMilestones: LawMilestone[] = [
-  { id: uid(), phase: "high_school", title: "Maintain top GPA + join debate/mock trial", status: "active" },
-  { id: uid(), phase: "high_school", title: "Build daily reading & writing habit", status: "active" },
-  { id: uid(), phase: "college", title: "Choose pre-law-friendly major (philosophy / poli-sci / econ)", status: "upcoming" },
-  { id: uid(), phase: "college", title: "Internship at a law firm or legal clinic", status: "upcoming" },
-  { id: uid(), phase: "lsat", title: "First LSAT diagnostic test", status: "upcoming" },
-  { id: uid(), phase: "lsat", title: "Score 165+ on a timed practice test", status: "upcoming" },
-  { id: uid(), phase: "applications", title: "Research scholarships & write personal statement", status: "upcoming" },
-  { id: uid(), phase: "applications", title: "Apply to target law schools", status: "upcoming" },
-  { id: uid(), phase: "law_school", title: "1L year — make law review", status: "upcoming" },
-  { id: uid(), phase: "bar", title: "Pass the bar exam", status: "upcoming" },
-];
-
-const defaultSkills = Object.fromEntries(BOXING_SKILLS.map((s) => [s, 5])) as Record<BoxingSkill, number>;
-
-// ~$1,500/mo total operating budget (per the earlier planning session) —
-// every number is editable on the Advertising page.
-const seedAdChannels: AdChannel[] = [
-  { id: uid(), name: "TikTok Ads", monthlyBudget: 800 },
-  { id: uid(), name: "Etsy Ads", monthlyBudget: 300 },
-  { id: uid(), name: "API & software costs", monthlyBudget: 150 },
-  { id: uid(), name: "POD samples & other", monthlyBudget: 250 },
 ];
 
 // Cypress College → UC transfer checklist. Course numbers follow Cypress's
 // catalog style but MUST be verified against assist.org for the chosen
-// UC + major — the page links straight to ASSIST.
+// UC + major — the Career page links straight to ASSIST.
 const seedClasses: TransferClass[] = [
   { id: uid(), name: "English Composition", cypressCourse: "ENGL 100 C", appliesTo: "GE", status: "planned" },
   { id: uid(), name: "Critical Thinking / Writing", cypressCourse: "ENGL 103 C", appliesTo: "GE", status: "planned" },
@@ -373,14 +178,7 @@ export const useJarvis = create<JarvisState>()(
         { id: uid(), name: "Checking", kind: "bank", balance: 0 },
         { id: uid(), name: "Savings", kind: "bank", balance: 0 },
       ],
-      goals: [{ id: uid(), title: "Monthly revenue", target: 2000, horizon: "monthly" }],
-      bills: [],
-      payments: [],
-      spendingRules: { monthlyCapUSD: 300, perPaymentCapUSD: 100, minBalanceBufferUSD: 200 },
-      bank: { linked: false },
-      adChannels: seedAdChannels,
-      adSpends: [],
-      creators: [],
+      goals: [{ id: uid(), title: "Monthly income", target: 2000, horizon: "monthly" }],
       career: {
         targetUC: "UC Berkeley",
         major: "Computer Science",
@@ -388,18 +186,7 @@ export const useJarvis = create<JarvisState>()(
         lsatScores: [],
         classes: seedClasses,
       },
-      products: [],
-      listings: [],
-      content: [],
-      boxingSessions: [],
-      skills: defaultSkills,
-      workouts: [],
-      health: {},
       prayerLogs: {},
-      quranLogs: [],
-      dhikrLogs: [],
-      duas: [{ id: uid(), text: "Rabbana atina fid-dunya hasanah wa fil-akhirati hasanah wa qina 'adhab an-nar" }],
-      lawMilestones: seedMilestones,
       agentLog: [],
 
       setProfile: (p) => set((s) => ({ profile: { ...s.profile, ...p } })),
@@ -425,48 +212,6 @@ export const useJarvis = create<JarvisState>()(
       addGoal: (g) => set((s) => ({ goals: [...s.goals, { ...g, id: uid() }] })),
       deleteGoal: (id) => set((s) => ({ goals: s.goals.filter((g) => g.id !== id) })),
 
-      addBill: (b) => set((s) => ({ bills: [...s.bills, { ...b, id: uid() }] })),
-      updateBill: (id, patch) => set((s) => ({ bills: s.bills.map((b) => (b.id === id ? { ...b, ...patch } : b)) })),
-      deleteBill: (id) => set((s) => ({ bills: s.bills.filter((b) => b.id !== id) })),
-      recordPayment: (bill) =>
-        set((s) => {
-          const month = todayKey().slice(0, 7);
-          return {
-            payments: [
-              { id: uid(), billId: bill.id, name: bill.name, amount: bill.amount, date: todayKey(), month },
-              ...s.payments,
-            ],
-            bills: s.bills.map((b) => (b.id === bill.id ? { ...b, lastPaidMonth: month } : b)),
-            // every payment lands in the money ledger as a business expense
-            transactions: [
-              { id: uid(), amount: bill.amount, direction: "expense" as const, category: `Bill: ${bill.name}`, source: "other" as const, date: todayKey() },
-              ...s.transactions,
-            ],
-            // reflect it against the linked balance immediately
-            bank: s.bank.balance != null ? { ...s.bank, balance: s.bank.balance - bill.amount } : s.bank,
-          };
-        }),
-      setSpendingRules: (r) => set((s) => ({ spendingRules: { ...s.spendingRules, ...r } })),
-      setBank: (b) => set((s) => ({ bank: { ...s.bank, ...b } })),
-
-      setAdBudget: (id, monthlyBudget) =>
-        set((s) => ({ adChannels: s.adChannels.map((c) => (c.id === id ? { ...c, monthlyBudget: Math.max(0, monthlyBudget) } : c)) })),
-      addAdSpend: (channelId, amount, note) =>
-        set((s) => {
-          const channel = s.adChannels.find((c) => c.id === channelId);
-          return {
-            adSpends: [{ id: uid(), channelId, amount, date: todayKey(), note }, ...s.adSpends],
-            transactions: [
-              { id: uid(), amount, direction: "expense" as const, category: `Ads: ${channel?.name ?? "unknown"}`, source: "other" as const, date: todayKey(), notes: note },
-              ...s.transactions,
-            ],
-          };
-        }),
-      addCreator: (c) => set((s) => ({ creators: [{ ...c, id: uid() }, ...s.creators] })),
-      updateCreator: (id, patch) =>
-        set((s) => ({ creators: s.creators.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
-      deleteCreator: (id) => set((s) => ({ creators: s.creators.filter((c) => c.id !== id) })),
-
       setCareer: (c) => set((s) => ({ career: { ...s.career, ...c } })),
       updateClass: (id, status) =>
         set((s) => ({ career: { ...s.career, classes: s.career.classes.map((c) => (c.id === id ? { ...c, status } : c)) } })),
@@ -477,43 +222,12 @@ export const useJarvis = create<JarvisState>()(
           career: { ...s.career, lsatScores: [...s.career.lsatScores, { id: uid(), date: todayKey(), score }] },
         })),
 
-      addProduct: (p) => set((s) => ({ products: [{ ...p, id: uid() }, ...s.products] })),
-      updateProduct: (id, patch) =>
-        set((s) => ({ products: s.products.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
-      deleteProduct: (id) => set((s) => ({ products: s.products.filter((p) => p.id !== id) })),
-
-      addListing: (l) => set((s) => ({ listings: [{ ...l, id: uid() }, ...s.listings] })),
-      updateListing: (id, patch) =>
-        set((s) => ({ listings: s.listings.map((l) => (l.id === id ? { ...l, ...patch } : l)) })),
-      deleteListing: (id) => set((s) => ({ listings: s.listings.filter((l) => l.id !== id) })),
-
-      addContent: (c) => set((s) => ({ content: [{ ...c, id: uid() }, ...s.content] })),
-      updateContent: (id, patch) =>
-        set((s) => ({ content: s.content.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
-
-      addBoxingSession: (bs) => set((s) => ({ boxingSessions: [{ ...bs, id: uid() }, ...s.boxingSessions] })),
-      setSkill: (skill, rating) => set((s) => ({ skills: { ...s.skills, [skill]: rating } })),
       setFightPrep: (fightDate, targetWeight) => set(() => ({ fightDate, targetWeight })),
-
-      addWorkout: (w) => set((s) => ({ workouts: [{ ...w, id: uid() }, ...s.workouts] })),
-      deleteWorkout: (id) => set((s) => ({ workouts: s.workouts.filter((w) => w.id !== id) })),
-
-      logHealth: (date, patch) =>
-        set((s) => ({ health: { ...s.health, [date]: { ...s.health[date], ...patch } } })),
 
       logPrayer: (date, prayer, status) =>
         set((s) => ({
           prayerLogs: { ...s.prayerLogs, [date]: { ...s.prayerLogs[date], [prayer]: status } },
         })),
-      addQuranLog: (l) => set((s) => ({ quranLogs: [{ ...l, id: uid() }, ...s.quranLogs] })),
-      addDhikr: (date, kind, count) =>
-        set((s) => ({ dhikrLogs: [{ id: uid(), date, kind, count }, ...s.dhikrLogs] })),
-      addDua: (text) => set((s) => ({ duas: [...s.duas, { id: uid(), text }] })),
-      deleteDua: (id) => set((s) => ({ duas: s.duas.filter((d) => d.id !== id) })),
-
-      updateMilestone: (id, patch) =>
-        set((s) => ({ lawMilestones: s.lawMilestones.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
-      addMilestone: (m) => set((s) => ({ lawMilestones: [...s.lawMilestones, { ...m, id: uid() }] })),
 
       logAgent: (agent, summary) =>
         set((s) => ({
@@ -535,24 +249,11 @@ export function roiScore(t: Task): number {
   return Math.round(((t.impact * weight * urgency) / Math.max(0.25, t.effortHours)) * 10) / 10;
 }
 
-export function readinessScore(h: HealthLog | undefined): number | null {
-  if (!h) return null;
-  const parts: number[] = [];
-  if (h.sleepHours != null) parts.push(Math.min(1, h.sleepHours / 8));
-  if (h.energy != null) parts.push(h.energy / 10);
-  if (h.mood != null) parts.push(h.mood / 10);
-  if (h.stress != null) parts.push(1 - h.stress / 10);
-  if (!parts.length) return null;
-  return Math.round((parts.reduce((a, b) => a + b, 0) / parts.length) * 100);
-}
-
 export function financeSummary(transactions: Transaction[], month = todayKey().slice(0, 7)) {
   const inMonth = transactions.filter((t) => t.date.startsWith(month));
   const revenue = inMonth.filter((t) => t.direction === "income").reduce((a, t) => a + t.amount, 0);
   const expenses = inMonth.filter((t) => t.direction === "expense").reduce((a, t) => a + t.amount, 0);
-  const bySource = { tiktok: 0, etsy: 0, other: 0 };
-  for (const t of inMonth) if (t.direction === "income") bySource[t.source] += t.amount;
-  return { revenue, expenses, profit: revenue - expenses, bySource };
+  return { revenue, expenses, profit: revenue - expenses };
 }
 
 export function prayerStreak(prayerLogs: JarvisState["prayerLogs"]): number {

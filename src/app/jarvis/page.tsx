@@ -23,9 +23,9 @@ interface ChatMessage {
 }
 
 const SUGGESTIONS = [
+  "Open TikTok and look up boxing videos",
   "How much money did I make this month?",
-  "Run the POD pipeline",
-  "Find winning products for gym accessories",
+  "What's my career status?",
   "Open Chrome",
   "Plan my day",
   "When is the next prayer?",

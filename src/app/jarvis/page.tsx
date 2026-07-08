@@ -6,8 +6,9 @@ import { executeJarvisTool, localPlanner } from "@/lib/jarvis-executor";
 import { useVoice } from "@/hooks/use-voice";
 import { useMounted } from "@/hooks/use-mounted";
 import { Button, Card } from "@/components/ui";
+import { JarvisGlobe, type GlobeState } from "@/components/jarvis-globe";
 import { cn } from "@/lib/utils";
-import { Mic, MicOff, Send, Sparkles, Wrench } from "lucide-react";
+import { Mic, MicOff, Send, Wrench } from "lucide-react";
 
 // Minimal wire types for the Anthropic content blocks we handle client-side
 interface TextBlock { type: "text"; text: string }
@@ -119,43 +120,58 @@ export default function JarvisPage() {
 
   if (!mounted) return null;
 
+  const voiceOn = voice.state !== "off" && voice.state !== "unsupported";
+  const globeState: GlobeState =
+    busy ? "thinking"
+    : voice.state === "speaking" ? "speaking"
+    : voice.state === "listening" || voice.state === "wake" ? "listening"
+    : "idle";
+  const statusText =
+    busy ? "Thinking…"
+    : voice.state === "wake" ? `Listening for "Hey Jarvis"…`
+    : voice.state === "listening" ? "Listening…"
+    : voice.state === "speaking" ? "Speaking…"
+    : "Online. Text or voice.";
+
   return (
     <div className="fade-up flex h-[calc(100vh-6rem)] flex-col md:h-[calc(100vh-3rem)]">
       <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Sparkles size={18} className="text-emerald-400" /> JARVIS
-          </h1>
-          <p className="text-[12px] text-zinc-500">
-            {voice.state === "wake" && `Listening for "Hey Jarvis"…`}
-            {voice.state === "listening" && "Listening…"}
-            {voice.state === "speaking" && "Speaking…"}
-            {(voice.state === "off" || voice.state === "unsupported") && "Your operator. Text or voice."}
-          </p>
+        <div className="flex items-center gap-2.5">
+          {chat.length > 0 && <JarvisGlobe state={globeState} size={38} />}
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight" style={{ color: "#8fe3ff" }}>JARVIS</h1>
+            <p className="text-[12px] text-zinc-500">{statusText}</p>
+          </div>
         </div>
         <Button
-          variant={voice.state === "off" || voice.state === "unsupported" ? "ghost" : "primary"}
+          variant={voiceOn ? "primary" : "ghost"}
           className={cn(voice.state === "wake" || voice.state === "listening" ? "voice-pulse" : "")}
-          onClick={() => (voice.state === "off" || voice.state === "unsupported" ? voice.start() : voice.stop())}
+          onClick={() => (voiceOn ? voice.stop() : voice.start())}
           title={voice.supported ? "Toggle voice mode" : "Voice needs a Chromium browser"}
         >
-          {voice.state === "off" || voice.state === "unsupported" ? <MicOff size={14} /> : <Mic size={14} />}
-          {voice.state === "off" || voice.state === "unsupported" ? "Voice off" : "Voice on"}
+          {voiceOn ? <Mic size={14} /> : <MicOff size={14} />}
+          {voiceOn ? "Voice on" : "Voice off"}
         </Button>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto rounded-xl border border-white/[0.06] bg-[#0d0d0f] p-4">
         {chat.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center gap-4">
-            <p className="text-[13px] text-zinc-600">
-              Ask anything — JARVIS reads your real data and takes action.
+          <div className="flex h-full flex-col items-center justify-center gap-5">
+            <div className="flex flex-col items-center">
+              <JarvisGlobe state={globeState} size={300} />
+              <p className="mt-1 text-[13px] font-medium tracking-wide" style={{ color: "#8fe3ff" }}>
+                {statusText}
+              </p>
+            </div>
+            <p className="text-[13px] text-zinc-500">
+              {voiceOn ? `Say "Hey Jarvis"` : "Ask anything"} — I read your real data and take action.
             </p>
             <div className="flex max-w-xl flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((q) => (
                 <button
                   key={q}
                   onClick={() => void send(q)}
-                  className="rounded-full border border-white/[0.08] px-3 py-1.5 text-[12px] text-zinc-400 transition-colors hover:border-emerald-600/50 hover:text-zinc-200"
+                  className="rounded-full border border-white/[0.08] px-3 py-1.5 text-[12px] text-zinc-400 transition-colors hover:border-sky-400/50 hover:text-zinc-200"
                 >
                   {q}
                 </button>
@@ -215,8 +231,9 @@ export default function JarvisPage() {
       </form>
       {chat.length === 0 && (
         <Card className="mt-3 border-white/[0.05] bg-[#0d0d0f] py-2.5 text-[12px] text-zinc-600">
-          No API key? JARVIS still handles scheduling, prayers, tasks and money in offline mode. Add{" "}
-          <code className="text-zinc-400">ANTHROPIC_API_KEY</code> to <code className="text-zinc-400">.env.local</code> for the full agentic brain.
+          Runs on your own machine: set <code className="text-zinc-400">LOCAL_LLM_URL</code> to your Ollama/llama server for a
+          fully local brain, or <code className="text-zinc-400">ANTHROPIC_API_KEY</code> for Claude. With neither, the offline
+          planner still handles scheduling, prayers, tasks and money.
         </Card>
       )}
     </div>

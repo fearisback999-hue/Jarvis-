@@ -6,19 +6,31 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { JARVIS_SYSTEM_PROMPT, JARVIS_TOOLS } from "@/lib/jarvis-tools";
 import { getMcpToolDefs } from "@/lib/mcp";
+import { localLlmConfigured, runLocalLlm } from "@/lib/local-llm";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ type: "no_key" });
-  }
 
   const { messages, context } = (await req.json()) as {
     messages: Anthropic.MessageParam[];
     context?: string;
   };
+
+  const system = context ? `${JARVIS_SYSTEM_PROMPT}\n\nLive context snapshot:\n${context}` : JARVIS_SYSTEM_PROMPT;
+  const allTools = [...JARVIS_TOOLS, ...(await getMcpToolDefs().catch(() => []))];
+
+  // 1. Local LLM (Ollama / llama) takes priority — your brain, your machine
+  if (localLlmConfigured()) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return NextResponse.json(await runLocalLlm(system, messages as any, allTools));
+  }
+
+  // 2. Anthropic API
+  if (!apiKey) {
+    return NextResponse.json({ type: "no_key" });
+  }
 
   const client = new Anthropic({ apiKey });
 
@@ -31,7 +43,7 @@ export async function POST(req: NextRequest) {
         { type: "text", text: JARVIS_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
         ...(context ? [{ type: "text" as const, text: `Live context snapshot:\n${context}` }] : []),
       ],
-      tools: [...JARVIS_TOOLS, ...(await getMcpToolDefs().catch(() => []))].map((t) => ({
+      tools: allTools.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.input_schema as Anthropic.Tool.InputSchema,
